@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Register</title>
+  <link rel="stylesheet" href="/stylesheets/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Register - Step 2</h1>
+
+    <p><strong>Email:</strong> <%= data.email %></p>
+    <p><strong>Name:</strong> <%= data.firstName %> <%= data.lastName %></p>
+
+    <% if (error) { %>
+      <p class="error"><%= error %></p>
+    <% } %>
+
+    <form method="post" action="/register/password">
+      <div class="form-row">
+        <label>Password:</label>
+        <input type="password" name="password" required minlength="3" maxlength="32" />
+      </div>
+
+      <div class="form-row">
+        <label>Repeat Password:</label>
+        <input type="password" name="password2" required minlength="3" maxlength="32" />
+      </div>
+
+      <button type="submit">Submit</button>
+    </form>
+
+    <div class="actions">
+      <a href="/register">Back</a>
+    </div>
+  </div>
+</body>
+</html>
