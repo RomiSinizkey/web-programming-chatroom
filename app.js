@@ -16,7 +16,6 @@ const users = []; // { email, firstName, lastName, password }
 // ====== Validation rules ======
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const nameRegex = /^[A-Za-z]{2,}$/;
-const passRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 // ====== view engine setup ======
 app.set('views', path.join(__dirname, 'views'));
@@ -40,9 +39,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // GET /  -> login page
 app.get('/', (req, res) => {
-    const msg = req.query.msg || null; // show "you are registered" after redirect
+    if (req.session.user) {
+        return res.redirect('/chat');
+    }
+    const msg = req.query.msg || null;
     res.render('login', { message: msg });
 });
+
 
 app.post('/login', (req, res) => {
     const email = (req.body.email || '').trim().toLowerCase();
@@ -162,10 +165,7 @@ app.post('/register/password', (req, res) => {
             encodeURIComponent('Password must be between 3 and 32 characters'));
     }
 
-    if (!passRegex.test(pass1)) {
-        return res.redirect('/register/password?err=' +
-            encodeURIComponent('Password must be at least 8 characters and include uppercase, lowercase, number and special character'));
-    }
+
 
 
     // IMPORTANT: check email again right before inserting (simulates concurrent registration requirement)
@@ -188,6 +188,12 @@ app.post('/register/password', (req, res) => {
 
     // back to login with message
     return res.redirect('/?msg=' + encodeURIComponent('you are registered'));
+});
+
+app.get('/logout', (req, res) => {
+    req.session.destroy(() => {
+        return res.redirect('/?msg=' + encodeURIComponent('Logged out'));
+    });
 });
 
 // ====== catch 404 and forward to error handler ======
