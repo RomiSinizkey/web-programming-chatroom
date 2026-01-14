@@ -15,7 +15,8 @@ const users = []; // { email, firstName, lastName, password }
 
 // ====== Validation rules ======
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const nameRegex = /^[A-Za-z]{2,}$/;
+// ✅ per requirements: letters only, 3-32
+const nameRegex = /^[A-Za-z]{3,32}$/;
 
 // ====== view engine setup ======
 app.set('views', path.join(__dirname, 'views'));
@@ -46,7 +47,6 @@ app.get('/', (req, res) => {
     res.render('login', { message: msg });
 });
 
-
 app.post('/login', (req, res) => {
     const email = (req.body.email || '').trim().toLowerCase();
     const password = (req.body.password || '').trim();
@@ -75,16 +75,15 @@ app.get('/chat', (req, res) => {
     if (!req.session.user) {
         return res.redirect('/?msg=' + encodeURIComponent('Please login first'));
     }
-
     res.render('chat', { user: req.session.user });
 });
 
-
-// GET /register -> step 1 page
+// GET /register -> step 1 page (same view file)
 app.get('/register', (req, res) => {
     const data = req.cookies.registerData || {};
     const error = req.query.err || null;
-    res.render('register_step1', { data, error });
+
+    res.render('register', { step: 1, data, error });
 });
 
 // POST /register -> validate + save cookie + go to step2
@@ -100,11 +99,9 @@ app.post('/register', (req, res) => {
     if (!emailRegex.test(email)) {
         return res.redirect('/register?err=' + encodeURIComponent('Invalid email format'));
     }
-
     if (!nameRegex.test(firstName) || !nameRegex.test(lastName)) {
-        return res.redirect('/register?err=' + encodeURIComponent('Name must contain only letters and be at least 2 characters'));
+        return res.redirect('/register?err=' + encodeURIComponent('Name must contain only letters and be 3-32 characters'));
     }
-
 
     // check if email already used
     const exists = users.some(u => u.email.toLowerCase() === email);
@@ -123,7 +120,7 @@ app.post('/register', (req, res) => {
     return res.redirect('/register/password');
 });
 
-// GET /register/password -> step 2 page
+// GET /register/password -> step 2 page (same view file)
 app.get('/register/password', (req, res) => {
     const data = req.cookies.registerData;
     const error = req.query.err || null;
@@ -136,7 +133,7 @@ app.get('/register/password', (req, res) => {
         return res.redirect('/register?err=' + encodeURIComponent('Registration timed out, please start again'));
     }
 
-    res.render('register_step2', { data, error });
+    res.render('register', { step: 2, data, error });
 });
 
 // POST /register/password -> finish registration
@@ -144,7 +141,6 @@ app.post('/register/password', (req, res) => {
     const data = req.cookies.registerData;
     const pass1 = (req.body.password || '').trim();
     const pass2 = (req.body.password2 || '').trim();
-
 
     if (!data) return res.redirect('/register');
 
@@ -161,12 +157,8 @@ app.post('/register/password', (req, res) => {
         return res.redirect('/register/password?err=' + encodeURIComponent('Passwords do not match'));
     }
     if (pass1.length < 3 || pass1.length > 32) {
-        return res.redirect('/register/password?err=' +
-            encodeURIComponent('Password must be between 3 and 32 characters'));
+        return res.redirect('/register/password?err=' + encodeURIComponent('Password must be between 3 and 32 characters'));
     }
-
-
-
 
     // IMPORTANT: check email again right before inserting (simulates concurrent registration requirement)
     const exists = users.some(u => u.email.toLowerCase() === data.email.toLowerCase());
