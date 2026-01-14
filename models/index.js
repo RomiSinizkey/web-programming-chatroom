@@ -1,28 +1,42 @@
+// models/index.js
 const { Sequelize } = require('sequelize');
+const { defineUser } = require('./User');
+const { defineMessage } = require('./Message');
 
-//update by the DOCKER
-const DB_NAME = process.env.DB_NAME || 'YOUR_DB_NAME';
-const DB_USER = process.env.DB_USER || 'YOUR_DB_USER';
-const DB_PASS = process.env.DB_PASS || 'YOUR_DB_PASS';
-const DB_HOST = process.env.DB_HOST || 'localhost';
-const DB_DIALECT = 'mariadb';
+// update by the DOCKER (env)
+const DB_NAME = process.env.DB_NAME || 'mydb';
+const DB_USER = process.env.DB_USER || 'internet';
+const DB_PASS = process.env.DB_PASS || 'internet';
+const DB_HOST = process.env.DB_HOST || '127.0.0.1';
+const DB_PORT = Number(process.env.DB_PORT || 3306);
 
 const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASS, {
     host: DB_HOST,
-    dialect: DB_DIALECT,
+    port: DB_PORT,
+    dialect: 'mariadb',
     logging: false,
 });
 
-async function testConnection() {
-    try {
-        await sequelize.authenticate();
-        console.log('DB connected');
-    } catch (err) {
-        console.error('DB connection failed:', err.message);
-    }
+// Models
+const User = defineUser(sequelize);
+const Message = defineMessage(sequelize);
+
+// Associations
+User.hasMany(Message, { foreignKey: 'userEmail', sourceKey: 'email' });
+Message.belongsTo(User, { foreignKey: 'userEmail', targetKey: 'email' });
+
+async function initDb() {
+    await sequelize.authenticate();
+    console.log('DB connected');
+
+    // יוצר טבלאות אם לא קיימות
+    await sequelize.sync();
+    console.log('DB synced');
 }
 
 module.exports = {
     sequelize,
-    testConnection,
+    initDb,
+    User,
+    Message,
 };

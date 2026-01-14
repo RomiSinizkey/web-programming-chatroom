@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  mariadb:
+    image: mariadb:12.1.2
+    container_name: mariadb-server
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: password # Change this to a strong password
+      MYSQL_DATABASE: mydb # Optional: Create an initial database
+      MYSQL_USER: internet # Optional: Create an initial user
+      MYSQL_PASSWORD: internet # Optional: Set password for the user
+    volumes:
+      - mariadb_data:/var/lib/mysql # Persist data outside the container
+    ports:
+      - "3306:3306"     # allow host to connect via localhost:3306
+    networks:
+      - app-network
+
+  phpmyadmin:
+    platform: linux/amd64  # force amd64 (use emulation on arm64 hosts)
+    image: phpmyadmin/phpmyadmin:latest # Use the official phpMyAdmin image
+    container_name: phpmyadmin-interface
+    restart: always
+    ports:
+      - "8080:80" # Map host port 8080 to container port 80
+    environment:
+      PMA_HOST: mariadb # Connect to the MariaDB service by its name
+      MYSQL_ROOT_PASSWORD: password # Use the same root password as MariaDB
+      PMA_ARBITRARY: 1 # Optional: Allow connecting to arbitrary servers
+    depends_on:
+      - mariadb # Ensure MariaDB starts before phpMyAdmin
+    networks:
+      - app-network
+
+volumes:
+  mariadb_data: # Define the named volume for MariaDB data persistence
+
+networks:
+  app-network: # Define a custom network for container communication
+    driver: bridge

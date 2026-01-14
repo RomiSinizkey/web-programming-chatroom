@@ -4,14 +4,17 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 const session = require('express-session');
+const { initDb, User } = require('./models');
 
 const app = express();
 
+initDb().catch((err) => {
+    console.error('DB init failed:', err);
+    process.exit(1);
+});
+
 // ====== CONSTS for Part A ======
 const TIMEOUT_REGISTER = 30 * 1000; // 30 seconds
-
-// In-memory users list (Part A only, no DB yet)
-const users = []; // { email, firstName, lastName, password }
 
 // ====== Validation rules ======
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -47,29 +50,33 @@ app.get('/', (req, res) => {
     res.render('login', { message: msg });
 });
 
-app.post('/login', (req, res) => {
-    const email = (req.body.email || '').trim().toLowerCase();
-    const password = (req.body.password || '').trim();
+app.post('/login', async (req, res, next) => {
+    try {
+        const email = (req.body.email || '').trim().toLowerCase();
+        const password = (req.body.password || '').trim();
 
-    const user = users.find(u => u.email === email);
+        const user = await User.findByPk(email);
 
-    if (!user) {
-        return res.redirect('/?msg=' + encodeURIComponent('User does not exist'));
+        if (!user) {
+            return res.redirect('/?msg=' + encodeURIComponent('User does not exist'));
+        }
+
+        if (user.password !== password) {
+            return res.redirect('/?msg=' + encodeURIComponent('Incorrect password'));
+        }
+
+        req.session.user = {
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+        };
+
+        return res.redirect('/chat');
+    } catch (err) {
+        return next(err);
     }
-
-    if (user.password !== password) {
-        return res.redirect('/?msg=' + encodeURIComponent('Incorrect password'));
-    }
-
-    // Login success — prepare for Part B
-    req.session.user = {
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName
-    };
-
-    return res.redirect('/chat');
 });
+
 
 app.get('/chat', (req, res) => {
     if (!req.session.user) {
@@ -87,7 +94,7 @@ app.get('/register', (req, res) => {
 });
 
 // POST /register -> validate + save cookie + go to step2
-app.post('/register', (req, res) => {
+app.post('/register', async (req, res, next) => {
     const email = (req.body.email || '').trim().toLowerCase();
     const firstName = (req.body.firstName || '').trim().toLowerCase();
     const lastName = (req.body.lastName || '').trim().toLowerCase();
@@ -104,7 +111,7 @@ app.post('/register', (req, res) => {
     }
 
     // check if email already used
-    const exists = users.some(u => u.email.toLowerCase() === email);
+    const exists = await User.findByPk(email);
     if (exists) {
         return res.redirect('/register?err=' + encodeURIComponent('this email is already in use, please choose another one'));
     }
@@ -137,7 +144,7 @@ app.get('/register/password', (req, res) => {
 });
 
 // POST /register/password -> finish registration
-app.post('/register/password', (req, res) => {
+app.post('/register/password', async (req, res, next) => {
     const data = req.cookies.registerData;
     const pass1 = (req.body.password || '').trim();
     const pass2 = (req.body.password2 || '').trim();
@@ -160,18 +167,18 @@ app.post('/register/password', (req, res) => {
         return res.redirect('/register/password?err=' + encodeURIComponent('Password must be between 3 and 32 characters'));
     }
 
-    // IMPORTANT: check email again right before inserting (simulates concurrent registration requirement)
-    const exists = users.some(u => u.email.toLowerCase() === data.email.toLowerCase());
+    const exists = await User.findByPk((data.email || '').toLowerCase());
     if (exists) {
         res.clearCookie('registerData');
         return res.redirect('/register?err=' + encodeURIComponent('this email is already in use, please choose another one'));
     }
 
+
     // create user
-    users.push({
-        email: data.email,
-        firstName: data.firstName,
-        lastName: data.lastName,
+    await User.create({
+        email: (data.email || '').toLowerCase(),
+        firstName: (data.firstName || '').toLowerCase(),
+        lastName: (data.lastName || '').toLowerCase(),
         password: pass1,
     });
 
