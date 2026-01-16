@@ -50,7 +50,8 @@ app.get('/', (req, res) => {
     res.render('login', { message: msg });
 });
 
-app.post('/login', async (req, res, next) => {
+app.post('/login', async (req, res,
+                          next) => {
     try {
         const email = (req.body.email || '').trim().toLowerCase();
         const password = (req.body.password || '').trim();
@@ -94,7 +95,8 @@ app.get('/register', (req, res) => {
 });
 
 // POST /register -> validate + save cookie + go to step2
-app.post('/register', async (req, res, next) => {
+app.post('/register', async (req,
+                             res, next) => {
     const email = (req.body.email || '').trim().toLowerCase();
     const firstName = (req.body.firstName || '').trim().toLowerCase();
     const lastName = (req.body.lastName || '').trim().toLowerCase();
@@ -107,13 +109,15 @@ app.post('/register', async (req, res, next) => {
         return res.redirect('/register?err=' + encodeURIComponent('Invalid email format'));
     }
     if (!nameRegex.test(firstName) || !nameRegex.test(lastName)) {
-        return res.redirect('/register?err=' + encodeURIComponent('Name must contain only letters and be 3-32 characters'));
+        return res.redirect('/register?err=' +
+            encodeURIComponent('Name must contain only letters and be 3-32 characters'));
     }
 
     // check if email already used
     const exists = await User.findByPk(email);
     if (exists) {
-        return res.redirect('/register?err=' + encodeURIComponent('this email is already in use, please choose another one'));
+        return res.redirect('/register?err=' +
+            encodeURIComponent('this email is already in use, please choose another one'));
     }
 
     // save cookie for 30 seconds from NOW (step2 start moment requirement)
@@ -137,14 +141,16 @@ app.get('/register/password', (req, res) => {
     // timeout check
     if (Date.now() - (data.createdAt || 0) > TIMEOUT_REGISTER) {
         res.clearCookie('registerData');
-        return res.redirect('/register?err=' + encodeURIComponent('Registration timed out, please start again'));
+        return res.redirect('/register?err=' +
+            encodeURIComponent('Registration timed out, please start again'));
     }
 
     res.render('register', { step: 2, data, error });
 });
 
 // POST /register/password -> finish registration
-app.post('/register/password', async (req, res, next) => {
+app.post('/register/password', async (req,
+                                      res, next) => {
     const data = req.cookies.registerData;
     const pass1 = (req.body.password || '').trim();
     const pass2 = (req.body.password2 || '').trim();
@@ -164,13 +170,15 @@ app.post('/register/password', async (req, res, next) => {
         return res.redirect('/register/password?err=' + encodeURIComponent('Passwords do not match'));
     }
     if (pass1.length < 3 || pass1.length > 32) {
-        return res.redirect('/register/password?err=' + encodeURIComponent('Password must be between 3 and 32 characters'));
+        return res.redirect('/register/password?err=' +
+            encodeURIComponent('Password must be between 3 and 32 characters'));
     }
 
     const exists = await User.findByPk((data.email || '').toLowerCase());
     if (exists) {
         res.clearCookie('registerData');
-        return res.redirect('/register?err=' + encodeURIComponent('this email is already in use, please choose another one'));
+        return res.redirect('/register?err=' +
+            encodeURIComponent('this email is already in use, please choose another one'));
     }
 
 
@@ -212,39 +220,80 @@ app.get("/api/messages", requireAuth, async (req, res, next) => {
         const limit = 50;
 
         const messages = await Message.findAll({
+            include: [{ model: User, attributes: ["firstName"] }],
             order: [["createdAt", "DESC"]],
             limit,
         });
 
-        // return ascending so UI prints in correct order
         res.json(messages.reverse());
-    } catch (err) {
-        next(err);
+    } catch (error_) {
+        next(error_);
     }
 });
 
-// POST new message
-app.post("/api/messages", requireAuth, async (req, res, next) => {
+// EDIT message (fetch) - only owner
+app.patch("/api/messages/:id", requireAuth, async (req, res, next) => {
     try {
+        const id = req.params.id;
         const text = (req.body.text || "").trim();
 
-        if (!text) {
-            return res.status(400).json({ error: "Message text is required" });
-        }
-        if (text.length > 500) {
-            return res.status(400).json({ error: "Message too long (max 500)" });
+        if (!text) return res.status(400).json({ error: "Message text is required" });
+        if (text.length > 500) return res.status(400).json({ error: "Message too long (max 500)" });
+
+        const msg = await Message.findByPk(id);
+        if (!msg) return res.status(404).json({ error: "Message not found" });
+
+        if (msg.userEmail !== req.session.user.email) {
+            return res.status(403).json({ error: "Not allowed" });
         }
 
-        const msg = await Message.create({
-            text,
-            userEmail: req.session.user.email,
-        });
+        msg.text = text;
+        await msg.save();
 
-        res.status(201).json(msg);
+        return res.json({ ok: true });
+    } catch (error_) {
+        next(error_);
+    }
+});
+
+
+
+app.post("/messages", async (req, res, next) => {
+    try {
+        if (!req.session.user) {
+            return res.redirect("/?msg=" + encodeURIComponent("Please login first"));
+        }
+
+        const text = (req.body.text || "").trim();
+        if (!text || text.length > 500) return res.redirect("/chat");
+
+        await Message.create({ text, userEmail: req.session.user.email });
+        return res.redirect("/chat");
     } catch (err) {
         next(err);
     }
 });
+
+// DELETE new message
+app.post("/messages/delete", async (req, res, next) => {
+    try {
+        if (!req.session.user) {
+            return res.redirect("/?msg=" + encodeURIComponent("Please login first"));
+        }
+
+        const id = req.body.id;
+        const msg = await Message.findByPk(id);
+
+        if (!msg) return res.redirect("/chat");
+        if (msg.userEmail !== req.session.user.email) return res.redirect("/chat");
+
+        await msg.destroy(); // soft delete בגלל paranoid: true
+        return res.redirect("/chat");
+    } catch (error_) {
+        next(error_);
+    }
+});
+
 
 // ====== catch 404 and forward to error handler ======
 app.use(function(req, res, next) {
