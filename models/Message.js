@@ -16,9 +16,10 @@ function defineMessage(sequelize) {
                 validate: { len: [1, 500] },
             },
             userEmail: {
-                type: DataTypes.STRING(32),
+                type: DataTypes.STRING(255),
                 allowNull: false,
             },
+
         },
         {
             tableName: 'messages',

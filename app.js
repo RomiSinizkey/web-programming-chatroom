@@ -4,7 +4,7 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 const session = require('express-session');
-const { initDb, User } = require('./models');
+const { initDb, User, Message } = require('./models');
 
 const app = express();
 
@@ -193,6 +193,57 @@ app.get('/logout', (req, res) => {
     req.session.destroy(() => {
         return res.redirect('/?msg=' + encodeURIComponent('Logged out'));
     });
+});
+
+
+// ====== ROUTES (Part B) ======
+
+function requireAuth(req, res, next) {
+    if (!req.session.user) {
+        return res.status(401).json({ error: "Not authenticated" });
+    }
+    next();
+}
+
+
+// GET messages (latest 50)
+app.get("/api/messages", requireAuth, async (req, res, next) => {
+    try {
+        const limit = 50;
+
+        const messages = await Message.findAll({
+            order: [["createdAt", "DESC"]],
+            limit,
+        });
+
+        // return ascending so UI prints in correct order
+        res.json(messages.reverse());
+    } catch (err) {
+        next(err);
+    }
+});
+
+// POST new message
+app.post("/api/messages", requireAuth, async (req, res, next) => {
+    try {
+        const text = (req.body.text || "").trim();
+
+        if (!text) {
+            return res.status(400).json({ error: "Message text is required" });
+        }
+        if (text.length > 500) {
+            return res.status(400).json({ error: "Message too long (max 500)" });
+        }
+
+        const msg = await Message.create({
+            text,
+            userEmail: req.session.user.email,
+        });
+
+        res.status(201).json(msg);
+    } catch (err) {
+        next(err);
+    }
 });
 
 // ====== catch 404 and forward to error handler ======
