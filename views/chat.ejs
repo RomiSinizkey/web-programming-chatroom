@@ -190,29 +190,79 @@
                 editBtn.title = "Edit";
                 editBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
 
-                editBtn.addEventListener("click", async () => {
-                    const currentText = m.text || "";
-                    const nextText = prompt("Edit message:", currentText);
-                    if (nextText === null) return; // cancel
-                    const trimmed = nextText.trim();
-                    if (!trimmed) return;
+                editBtn.addEventListener("click", () => {
 
-                    clearError();
+                    if (bubble.dataset.editing === "1") return;
+                    bubble.dataset.editing = "1";
 
-                    const res = await fetch(`/api/messages/${m.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                        body: JSON.stringify({ text: trimmed }),
-                    });
+                    const originalText = m.text || "";
 
-                    if (!res.ok) {
-                        const body = await res.json().catch(() => ({}));
-                        showError(body.error || `Failed to edit message (${res.status})`);
-                        return;
+                    // מחליפים את הטקסט ב-input editable
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.maxLength = 500;
+                    input.className = "form-control form-control-sm";
+                    input.value = originalText;
+
+                    // כפתורי שמירה/ביטול
+                    const saveBtn = document.createElement("button");
+                    saveBtn.type = "button";
+                    saveBtn.className = "btn btn-sm btn-success";
+                    saveBtn.innerHTML = '<i class="fa-solid fa-check"></i>';
+
+                    const cancelBtn = document.createElement("button");
+                    cancelBtn.type = "button";
+                    cancelBtn.className = "btn btn-sm btn-outline-secondary";
+                    cancelBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+
+                    const editRow = document.createElement("div");
+                    editRow.className = "d-flex gap-2 align-items-center";
+                    editRow.appendChild(input);
+                    editRow.appendChild(saveBtn);
+                    editRow.appendChild(cancelBtn);
+
+                    // מחליפים את התוכן של textDiv בעריכה
+                    textDiv.innerHTML = "";
+                    textDiv.appendChild(editRow);
+                    input.focus();
+
+                    async function save() {
+                        const trimmed = input.value.trim();
+                        if (!trimmed) return;
+
+                        clearError();
+
+                        const res = await fetch(`/api/messages/${m.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                            body: JSON.stringify({ text: trimmed }),
+                        });
+
+                        if (!res.ok) {
+                            const body = await res.json().catch(() => ({}));
+                            showError(body.error || `Failed to edit message (${res.status})`);
+                            return;
+                        }
+
+                        bubble.dataset.editing = "0";
+                        await loadMessages();
                     }
 
-                    await loadMessages();
+                    function cancel() {
+                        // מחזירים לטקסט המקורי
+                        bubble.dataset.editing = "0";
+                        textDiv.innerHTML = escapeHtml(originalText);
+                    }
+
+                    saveBtn.addEventListener("click", () => void save());
+                    cancelBtn.addEventListener("click", cancel);
+
+                    input.addEventListener("keydown", (e) => {
+                        if (e.key === "Enter") void save();
+                        if (e.key === "Escape") cancel();
+                    });
                 });
+
 
                 actions.appendChild(deleteForm);
                 actions.appendChild(editBtn);
