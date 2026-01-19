@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
     <meta charset="utf-8" />
     <title>Chatroom</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -27,6 +28,14 @@
             white-space: pre-wrap;
             word-break: break-word;
         }
+
+        mark.chat-highlight {
+            padding: 0 2px;
+            border-radius: 3px;
+        }
+        mark.chat-highlight.current {
+            outline: 2px solid rgba(0,0,0,0.2);
+        }
     </style>
 </head>
 
@@ -50,13 +59,36 @@
 
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <div class="text-muted small">Messages (latest 50)</div>
-                        <button id="refreshBtn" type="button" class="btn btn-sm btn-outline-primary">Refresh</button>
+
+                        <div class="d-flex gap-2">
+                            <button id="selectAllBtn" type="button" class="btn btn-sm btn-outline-secondary">Select all</button>
+                            <button id="clearAllBtn" type="button" class="btn btn-sm btn-outline-secondary">Clear</button>
+                            <button id="deleteSelectedBtn" type="button" class="btn btn-sm btn-outline-danger" disabled>
+                                Delete selected
+                            </button>
+                            <button id="refreshBtn" type="button" class="btn btn-sm btn-outline-primary">Refresh</button>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 align-items-center mb-2">
+                        <input id="searchInput" class="form-control form-control-sm"
+                               type="text" placeholder="Search messages..."
+                               autocomplete="off" />
+
+                        <button id="prevMatchBtn" type="button" class="btn btn-sm btn-outline-secondary" disabled>
+                            Prev
+                        </button>
+                        <button id="nextMatchBtn" type="button" class="btn btn-sm btn-outline-secondary" disabled>
+                            Next
+                        </button>
+
+                        <div id="matchInfo" class="text-muted small ms-1"></div>
                     </div>
 
                     <div id="messagesBox" class="border rounded p-3 mb-3"></div>
 
                     <form id="sendForm" class="d-flex gap-2" autocomplete="off" method="POST" action="/messages">
-                    <label for="msgInput" class="visually-hidden">Message</label>
+                        <label for="msgInput" class="visually-hidden">Message</label>
                         <input
                                 id="msgInput"
                                 name="text"
@@ -84,11 +116,27 @@
 
     const messagesBox = document.getElementById("messagesBox");
     const errorBox = document.getElementById("errorBox");
-    const sendForm = document.getElementById("sendForm");
     const msgInput = document.getElementById("msgInput");
     const refreshBtn = document.getElementById("refreshBtn");
-    const sendBtn = document.getElementById("sendBtn");
+    const selectAllBtn = document.getElementById("selectAllBtn");
+    const clearAllBtn = document.getElementById("clearAllBtn");
+    const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
 
+    const searchInput = document.getElementById("searchInput");
+    const prevMatchBtn = document.getElementById("prevMatchBtn");
+    const nextMatchBtn = document.getElementById("nextMatchBtn");
+    const matchInfo = document.getElementById("matchInfo");
+
+    // messages state
+    let allMessages = [];
+    let filteredMessages = [];
+    let matchIds = [];
+    let currentMatchIndex = -1;
+
+    // selection state (for multi delete)
+    const selectedIds = new Set();
+
+    // render optimization
     let lastRenderedHash = "";
 
     function showError(msg) {
@@ -103,6 +151,39 @@
         errorBox.classList.add("d-none");
     }
 
+    function updateDeleteSelectedUI() {
+        if (!deleteSelectedBtn) return;
+        deleteSelectedBtn.disabled = selectedIds.size === 0;
+        deleteSelectedBtn.textContent = selectedIds.size === 0
+            ? "Delete selected"
+            : `Delete selected (${selectedIds.size})`;
+    }
+
+    async function deleteSelected() {
+        if (selectedIds.size === 0) return;
+        if (!confirm(`Delete ${selectedIds.size} selected messages?`)) return;
+
+        clearError();
+
+        const ids = Array.from(selectedIds);
+
+        const res = await fetch("/api/messages/delete-many", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({ ids }),
+        });
+
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            showError(body.error || `Failed to delete messages (${res.status})`);
+            return;
+        }
+
+        selectedIds.clear();
+        updateDeleteSelectedUI();
+        await loadMessages();
+    }
+
     function escapeHtml(str) {
         return String(str)
             .replaceAll("&", "&amp;")
@@ -112,6 +193,19 @@
             .replaceAll("'", "&#039;");
     }
 
+    function escapeRegex(s) {
+        return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function highlightText(text, query) {
+        const safe = escapeHtml(text || "");
+        const q = (query || "").trim();
+        if (!q) return safe;
+
+        const re = new RegExp(escapeRegex(q), "gi");
+        return safe.replace(re, (m) => `<mark class="chat-highlight">${m}</mark>`);
+    }
+
     function formatTime(iso) {
         if (!iso) return "";
         const d = new Date(iso);
@@ -119,7 +213,51 @@
     }
 
     function hashMessages(arr) {
+        // include search text too? not necessary, but we hash message changes
         return JSON.stringify(arr.map(m => [m.id, m.updatedAt, m.deletedAt]));
+    }
+
+    function applySearchAndRender() {
+        const q = (searchInput?.value || "").trim().toLowerCase();
+
+        filteredMessages = !q
+            ? allMessages
+            : allMessages.filter(m => String(m.text || "").toLowerCase().includes(q));
+
+        matchIds = filteredMessages.map(m => String(m.id));
+        currentMatchIndex = matchIds.length ? 0 : -1;
+
+        if (prevMatchBtn) prevMatchBtn.disabled = matchIds.length === 0;
+        if (nextMatchBtn) nextMatchBtn.disabled = matchIds.length === 0;
+
+        if (matchInfo) {
+            matchInfo.textContent = matchIds.length
+                ? `1 / ${matchIds.length}`
+                : (q ? "0 matches" : "");
+        }
+
+        // Important: render filtered list
+        renderMessages(filteredMessages);
+
+        // and highlight current match
+        highlightCurrentMatchInDom();
+    }
+
+    function highlightCurrentMatchInDom() {
+        if (currentMatchIndex < 0 || !matchIds.length) return;
+
+        document.querySelectorAll("mark.chat-highlight.current")
+            .forEach(el => el.classList.remove("current"));
+
+        const targetId = matchIds[currentMatchIndex];
+
+        const wrapper = messagesBox.querySelector(`[data-msg-id="${CSS.escape(targetId)}"]`);
+        if (!wrapper) return;
+
+        const firstMark = wrapper.querySelector("mark.chat-highlight");
+        if (firstMark) firstMark.classList.add("current");
+
+        wrapper.scrollIntoView({ behavior: "smooth", block: "center" });
     }
 
     function renderMessages(messages) {
@@ -136,12 +274,15 @@
             return;
         }
 
+        const q = (searchInput?.value || "").trim();
+
         for (const m of messages) {
             const email = (m.userEmail || "").toLowerCase();
             const isMine = email === String(currentUserEmail).toLowerCase();
 
             const wrapper = document.createElement("div");
             wrapper.className = "mb-3";
+            wrapper.dataset.msgId = String(m.id);
 
             const meta = document.createElement("div");
             meta.className = "msg-meta";
@@ -151,20 +292,37 @@
             const bubble = document.createElement("div");
             bubble.className = "msg-bubble border rounded p-2 " + (isMine ? "bg-primary text-white" : "bg-light");
 
-            // טקסט ההודעה
             const textDiv = document.createElement("div");
-            textDiv.innerHTML = escapeHtml(m.text || "");
+            textDiv.innerHTML = highlightText(m.text || "", q);
             bubble.appendChild(textDiv);
 
             wrapper.appendChild(meta);
             wrapper.appendChild(bubble);
 
-            // פעולות רק על הודעות שלי
             if (isMine) {
                 const actions = document.createElement("div");
                 actions.className = "mt-2 d-flex gap-2 align-items-center";
 
-                //  DELETE
+                // ✅ MULTI-SELECT checkbox
+                const cb = document.createElement("input");
+                cb.type = "checkbox";
+                cb.className = "form-check-input mt-0";
+                cb.title = "Select";
+
+                const idStr = String(m.id);
+                cb.value = idStr;
+                cb.dataset.msgId = idStr;
+                cb.checked = selectedIds.has(idStr);
+
+                cb.addEventListener("change", () => {
+                    if (cb.checked) selectedIds.add(idStr);
+                    else selectedIds.delete(idStr);
+                    updateDeleteSelectedUI();
+                });
+
+                actions.appendChild(cb);
+
+                // DELETE (single)
                 const deleteForm = document.createElement("form");
                 deleteForm.method = "POST";
                 deleteForm.action = "/messages/delete";
@@ -183,7 +341,7 @@
                 deleteForm.appendChild(hiddenId1);
                 deleteForm.appendChild(trashBtn);
 
-                // ️ EDIT (fetch)
+                // EDIT (fetch)
                 const editBtn = document.createElement("button");
                 editBtn.type = "button";
                 editBtn.className  = "btn btn-sm btn-outline-secondary";
@@ -191,7 +349,6 @@
                 editBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
 
                 editBtn.addEventListener("click", () => {
-
                     if (bubble.dataset.editing === "1") return;
                     bubble.dataset.editing = "1";
 
@@ -246,9 +403,9 @@
                     }
 
                     function cancel() {
-                        // מחזירים לטקסט המקורי
                         bubble.dataset.editing = "0";
-                        textDiv.innerHTML = escapeHtml(originalText);
+                        textDiv.innerHTML = highlightText(originalText, q);
+                        highlightCurrentMatchInDom();
                     }
 
                     saveBtn.addEventListener("click", () => void save());
@@ -259,7 +416,6 @@
                         if (e.key === "Escape") cancel();
                     });
                 });
-
 
                 actions.appendChild(deleteForm);
                 actions.appendChild(editBtn);
@@ -283,22 +439,88 @@
         }
 
         const messages = await res.json();
-        renderMessages(messages);
+        allMessages = messages;
+
+        // use search state
+        applySearchAndRender();
     }
-
-
 
     // Events
     if (refreshBtn) refreshBtn.addEventListener("click", () => void loadMessages());
 
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener("click", () => {
+            // select only visible (filtered) messages that are mine
+            selectedIds.clear();
 
+            for (const m of filteredMessages) {
+                if (String(m.userEmail).toLowerCase() === String(currentUserEmail).toLowerCase()) {
+                    selectedIds.add(String(m.id));
+                }
+            }
+
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                const id = cb.value;
+                cb.checked = selectedIds.has(id);
+            });
+
+            updateDeleteSelectedUI();
+        });
+    }
+
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener("click", () => {
+            selectedIds.clear();
+
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.checked = false;
+            });
+
+            updateDeleteSelectedUI();
+        });
+    }
+
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener("click", () => void deleteSelected());
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener("input", () => {
+            applySearchAndRender();
+        });
+
+        searchInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && matchIds.length) {
+                e.preventDefault();
+                currentMatchIndex = (currentMatchIndex + 1) % matchIds.length;
+                if (matchInfo) matchInfo.textContent = `${currentMatchIndex + 1} / ${matchIds.length}`;
+                highlightCurrentMatchInDom();
+            }
+        });
+    }
+
+    if (nextMatchBtn) {
+        nextMatchBtn.addEventListener("click", () => {
+            if (!matchIds.length) return;
+            currentMatchIndex = (currentMatchIndex + 1) % matchIds.length;
+            if (matchInfo) matchInfo.textContent = `${currentMatchIndex + 1} / ${matchIds.length}`;
+            highlightCurrentMatchInDom();
+        });
+    }
+
+    if (prevMatchBtn) {
+        prevMatchBtn.addEventListener("click", () => {
+            if (!matchIds.length) return;
+            currentMatchIndex = (currentMatchIndex - 1 + matchIds.length) % matchIds.length;
+            if (matchInfo) matchInfo.textContent = `${currentMatchIndex + 1} / ${matchIds.length}`;
+            highlightCurrentMatchInDom();
+        });
+    }
 
     // Init + polling
     const POLLING = 10_000; // 10 seconds
-
     void loadMessages();
     setInterval(() => void loadMessages(), POLLING);
-
 </script>
 
 </body>

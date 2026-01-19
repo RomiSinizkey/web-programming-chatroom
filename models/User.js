@@ -22,11 +22,10 @@ function defineUser(sequelize) {
                 validate: { len: [3, 32], is: /^[A-Za-z]+$/i },
             },
             password: {
-                // לפי חלק א' — לא מצפינים, רק trim (מה שאתה כבר עושה)
-                type: DataTypes.STRING(32),
+                type: DataTypes.STRING(255),
                 allowNull: false,
-                validate: { len: [3, 32] },
-            },
+            }
+
         },
         {
             tableName: 'users',

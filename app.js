@@ -1,3 +1,4 @@
+const BCRYPT_ROUNDS = 10;
 const createError = require('http-errors');
 const express = require('express');
 const path = require('path');
@@ -5,6 +6,7 @@ const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 const session = require('express-session');
 const { initDb, User, Message } = require('./models');
+const bcrypt = require('bcrypt');
 
 const app = express();
 
@@ -62,9 +64,11 @@ app.post('/login', async (req, res,
             return res.redirect('/?msg=' + encodeURIComponent('User does not exist'));
         }
 
-        if (user.password !== password) {
+        const ok = await bcrypt.compare(password, user.password);
+        if (!ok) {
             return res.redirect('/?msg=' + encodeURIComponent('Incorrect password'));
         }
+
 
         req.session.user = {
             email: user.email,
@@ -181,13 +185,13 @@ app.post('/register/password', async (req,
             encodeURIComponent('this email is already in use, please choose another one'));
     }
 
-
+    const hashed = await bcrypt.hash(pass1, BCRYPT_ROUNDS);
     // create user
     await User.create({
         email: (data.email || '').toLowerCase(),
         firstName: (data.firstName || '').toLowerCase(),
         lastName: (data.lastName || '').toLowerCase(),
-        password: pass1,
+        password: hashed,
     });
 
     // clear cookie after successful registration
@@ -291,6 +295,36 @@ app.post("/messages/delete", async (req, res, next) => {
         return res.redirect("/chat");
     } catch (error_) {
         next(error_);
+    }
+});
+// DELETE many message
+
+app.post("/api/messages/delete-many", requireAuth, async (req, res, next) => {
+    try {
+        let ids = req.body.ids;
+
+        if (!Array.isArray(ids)) {
+            return res.status(400).json({ error: "ids must be an array" });
+        }
+
+        const cleanIds = ids
+            .map(x => parseInt(x, 10))
+            .filter(n => Number.isInteger(n) && n > 0);
+
+        if (cleanIds.length === 0) {
+            return res.status(400).json({ error: "No valid ids provided" });
+        }
+
+        await Message.destroy({
+            where: {
+                id: cleanIds,
+                userEmail: req.session.user.email, // ✅ מוחק רק שלך
+            },
+        });
+
+        return res.json({ ok: true, deleted: cleanIds.length });
+    } catch (err) {
+        next(err);
     }
 });
 
