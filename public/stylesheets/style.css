@@ -1,139 +1,26 @@
-/* public/css/style.css */
+/* public/style.css - chat-only (Bootstrap is primary) */
 
-:root {
-  --bg: #f6f7fb;
-  --card: #ffffff;
-  --text: #111827;
-  --muted: #6b7280;
-  --border: #e5e7eb;
-  --primary: #2563eb;
-  --primaryHover: #1d4ed8;
-  --danger: #dc2626;
-}
-
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-}
-
-.container {
-  width: min(420px, calc(100% - 32px));
-  margin: 64px auto;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 22px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.06);
-}
-
-h1 {
-  margin: 0 0 14px;
-  font-size: 22px;
-  text-align: center;
-}
-
-p.hint {
-  margin: 0 0 16px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-form { margin-top: 10px; }
-
-.form-row { margin-bottom: 12px; }
-
-label {
-  display: block;
-  font-size: 13px;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-
-input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  outline: none;
-}
-
-input:focus {
-  border-color: rgba(37, 99, 235, 0.6);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
-}
-
-button {
-  width: 100%;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--primary);
-  color: white;
-  font-weight: 700;
-  cursor: pointer;
-  margin-top: 6px;
-}
-
-button:hover { background: var(--primaryHover); }
-
-a {
-  color: var(--primary);
-  text-decoration: none;
-}
-
-a:hover { text-decoration: underline; }
-
-.actions {
-  margin-top: 14px;
-  text-align: center;
-  font-size: 14px;
-  color: var(--muted);
-}
-
-.error {
-  color: var(--danger);
-  background: rgba(220, 38, 38, 0.08);
-  border: 1px solid rgba(220, 38, 38, 0.2);
-  padding: 10px 12px;
-  border-radius: 10px;
-  margin: 10px 0 14px;
-}
-
-.success {
-  color: #065f46;
-  background: rgba(16, 185, 129, 0.10);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  padding: 10px 12px;
-  border-radius: 10px;
-  margin: 10px 0 14px;
-}
 #messagesBox {
-    height: 420px;
-    overflow-y: auto;
-    background: #fff;
+  height: 420px;
+  overflow-y: auto;
+  background: #fff;
 }
 
 .msg-meta {
-    font-size: 0.8rem;
-    color: #6c757d;
+  font-size: 0.8rem;
+  color: #6c757d;
 }
 
 .msg-bubble {
-    white-space: pre-wrap;
-    word-break: break-word;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 mark.chat-highlight {
-    padding: 0 2px;
-    border-radius: 3px;
+  padding: 0 2px;
+  border-radius: 3px;
 }
 
 mark.chat-highlight.current {
-    outline: 2px solid rgba(0,0,0,0.2);
+  outline: 2px solid rgba(0,0,0,0.2);
 }
-

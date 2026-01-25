@@ -7,6 +7,7 @@ const logger = require('morgan');
 const session = require('express-session');
 const { initDb, User, Message } = require('./models');
 const bcrypt = require('bcrypt');
+const { Op } = require('sequelize');
 
 const app = express();
 
@@ -34,7 +35,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
 app.use(session({
-    secret: 'dev-secret-change-later',
+    secret: process.env.SESSION_SECRET || 'dev-secret-change-later',
     resave: false,
     saveUninitialized: false,
 }));
@@ -43,7 +44,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ====== ROUTES (Part A) ======
 
-// GET /  -> login page
+// GET / -> login page
 app.get('/', (req, res) => {
     if (req.session.user) {
         return res.redirect('/chat');
@@ -52,8 +53,7 @@ app.get('/', (req, res) => {
     res.render('login', { message: msg });
 });
 
-app.post('/login', async (req, res,
-                          next) => {
+app.post('/login', async (req, res, next) => {
     try {
         const email = (req.body.email || '').trim().toLowerCase();
         const password = (req.body.password || '').trim();
@@ -69,7 +69,6 @@ app.post('/login', async (req, res,
             return res.redirect('/?msg=' + encodeURIComponent('Incorrect password'));
         }
 
-
         req.session.user = {
             email: user.email,
             firstName: user.firstName,
@@ -82,7 +81,6 @@ app.post('/login', async (req, res,
     }
 });
 
-
 app.get('/chat', (req, res) => {
     if (!req.session.user) {
         return res.redirect('/?msg=' + encodeURIComponent('Please login first'));
@@ -90,115 +88,108 @@ app.get('/chat', (req, res) => {
     res.render('chat', { user: req.session.user });
 });
 
-// GET /register -> step 1 page (same view file)
+// GET /register -> step 1
 app.get('/register', (req, res) => {
     const data = req.cookies.registerData || {};
     const error = req.query.err || null;
-
     res.render('register', { step: 1, data, error });
 });
 
 // POST /register -> validate + save cookie + go to step2
-app.post('/register', async (req,
-                             res, next) => {
-    const email = (req.body.email || '').trim().toLowerCase();
-    const firstName = (req.body.firstName || '').trim().toLowerCase();
-    const lastName = (req.body.lastName || '').trim().toLowerCase();
+app.post('/register', async (req, res, next) => {
+    try {
+        const email = (req.body.email || '').trim().toLowerCase();
+        const firstName = (req.body.firstName || '').trim().toLowerCase();
+        const lastName = (req.body.lastName || '').trim().toLowerCase();
 
-    // basic validation (server side)
-    if (!email || !firstName || !lastName) {
-        return res.redirect('/register?err=' + encodeURIComponent('All fields are required'));
-    }
-    if (!emailRegex.test(email)) {
-        return res.redirect('/register?err=' + encodeURIComponent('Invalid email format'));
-    }
-    if (!nameRegex.test(firstName) || !nameRegex.test(lastName)) {
-        return res.redirect('/register?err=' +
-            encodeURIComponent('Name must contain only letters and be 3-32 characters'));
-    }
+        if (!email || !firstName || !lastName) {
+            return res.redirect('/register?err=' + encodeURIComponent('All fields are required'));
+        }
+        if (!emailRegex.test(email)) {
+            return res.redirect('/register?err=' + encodeURIComponent('Invalid email format'));
+        }
+        if (!nameRegex.test(firstName) || !nameRegex.test(lastName)) {
+            return res.redirect('/register?err=' + encodeURIComponent('Name must contain only letters and be 3-32 characters'));
+        }
 
-    // check if email already used
-    const exists = await User.findByPk(email);
-    if (exists) {
-        return res.redirect('/register?err=' +
-            encodeURIComponent('this email is already in use, please choose another one'));
+        const exists = await User.findByPk(email);
+        if (exists) {
+            return res.redirect('/register?err=' + encodeURIComponent('this email is already in use, please choose another one'));
+        }
+
+        // cookie saved for TIMEOUT_REGISTER from NOW (start of step2)
+        res.cookie('registerData', {
+            email,
+            firstName,
+            lastName,
+            createdAt: Date.now()
+        }, { maxAge: TIMEOUT_REGISTER });
+
+        return res.redirect('/register/password');
+    } catch (err) {
+        return next(err);
     }
-
-    // save cookie for 30 seconds from NOW (step2 start moment requirement)
-    res.cookie('registerData', {
-        email,
-        firstName,
-        lastName,
-        createdAt: Date.now()
-    }, { maxAge: TIMEOUT_REGISTER });
-
-    return res.redirect('/register/password');
 });
 
-// GET /register/password -> step 2 page (same view file)
+// GET /register/password -> step 2
 app.get('/register/password', (req, res) => {
     const data = req.cookies.registerData;
     const error = req.query.err || null;
 
-    if (!data) return res.redirect('/register'); // no cookie -> back to step1
+    if (!data) return res.redirect('/register');
 
-    // timeout check
     if (Date.now() - (data.createdAt || 0) > TIMEOUT_REGISTER) {
         res.clearCookie('registerData');
-        return res.redirect('/register?err=' +
-            encodeURIComponent('Registration timed out, please start again'));
+        return res.redirect('/register?err=' + encodeURIComponent('Registration timed out, please start again'));
     }
 
     res.render('register', { step: 2, data, error });
 });
 
 // POST /register/password -> finish registration
-app.post('/register/password', async (req,
-                                      res, next) => {
-    const data = req.cookies.registerData;
-    const pass1 = (req.body.password || '').trim();
-    const pass2 = (req.body.password2 || '').trim();
+app.post('/register/password', async (req, res, next) => {
+    try {
+        const data = req.cookies.registerData;
+        const pass1 = (req.body.password || '').trim();
+        const pass2 = (req.body.password2 || '').trim();
 
-    if (!data) return res.redirect('/register');
+        if (!data) return res.redirect('/register');
 
-    // timeout check (again)
-    if (Date.now() - (data.createdAt || 0) > TIMEOUT_REGISTER) {
+        if (Date.now() - (data.createdAt || 0) > TIMEOUT_REGISTER) {
+            res.clearCookie('registerData');
+            return res.redirect('/register?err=' + encodeURIComponent('Registration timed out, please start again'));
+        }
+
+        if (!pass1 || !pass2) {
+            return res.redirect('/register/password?err=' + encodeURIComponent('Password is required'));
+        }
+        if (pass1 !== pass2) {
+            return res.redirect('/register/password?err=' + encodeURIComponent('Passwords do not match'));
+        }
+        if (pass1.length < 3 || pass1.length > 32) {
+            return res.redirect('/register/password?err=' + encodeURIComponent('Password must be between 3 and 32 characters'));
+        }
+
+        const exists = await User.findByPk((data.email || '').toLowerCase());
+        if (exists) {
+            res.clearCookie('registerData');
+            return res.redirect('/register?err=' + encodeURIComponent('this email is already in use, please choose another one'));
+        }
+
+        const hashed = await bcrypt.hash(pass1, BCRYPT_ROUNDS);
+
+        await User.create({
+            email: (data.email || '').toLowerCase(),
+            firstName: (data.firstName || '').toLowerCase(),
+            lastName: (data.lastName || '').toLowerCase(),
+            password: hashed,
+        });
+
         res.clearCookie('registerData');
-        return res.redirect('/register?err=' + encodeURIComponent('Registration timed out, please start again'));
+        return res.redirect('/?msg=' + encodeURIComponent('you are registered'));
+    } catch (err) {
+        return next(err);
     }
-
-    if (!pass1 || !pass2) {
-        return res.redirect('/register/password?err=' + encodeURIComponent('Password is required'));
-    }
-    if (pass1 !== pass2) {
-        return res.redirect('/register/password?err=' + encodeURIComponent('Passwords do not match'));
-    }
-    if (pass1.length < 3 || pass1.length > 32) {
-        return res.redirect('/register/password?err=' +
-            encodeURIComponent('Password must be between 3 and 32 characters'));
-    }
-
-    const exists = await User.findByPk((data.email || '').toLowerCase());
-    if (exists) {
-        res.clearCookie('registerData');
-        return res.redirect('/register?err=' +
-            encodeURIComponent('this email is already in use, please choose another one'));
-    }
-
-    const hashed = await bcrypt.hash(pass1, BCRYPT_ROUNDS);
-    // create user
-    await User.create({
-        email: (data.email || '').toLowerCase(),
-        firstName: (data.firstName || '').toLowerCase(),
-        lastName: (data.lastName || '').toLowerCase(),
-        password: hashed,
-    });
-
-    // clear cookie after successful registration
-    res.clearCookie('registerData');
-
-    // back to login with message
-    return res.redirect('/?msg=' + encodeURIComponent('you are registered'));
 });
 
 app.get('/logout', (req, res) => {
@@ -207,104 +198,132 @@ app.get('/logout', (req, res) => {
     });
 });
 
-
 // ====== ROUTES (Part B) ======
 
 function requireAuth(req, res, next) {
     if (!req.session.user) {
-        return res.status(401).json({ error: "Not authenticated" });
+        return res.status(401).json({ error: 'Session expired. Please login again.' });
     }
     next();
 }
 
-
-// GET messages (latest 50)
-app.get("/api/messages", requireAuth, async (req, res, next) => {
+// GET messages (latest 50) - NEWEST FIRST (DESC)
+app.get('/api/messages', requireAuth, async (req, res, next) => {
     try {
         const limit = 50;
 
         const messages = await Message.findAll({
-            include: [{ model: User, attributes: ["firstName"] }],
-            order: [["createdAt", "DESC"]],
+            include: [{ model: User, attributes: ['firstName'] }],
+            order: [['createdAt', 'DESC']],
             limit,
         });
 
-        res.json(messages.reverse());
-    } catch (error_) {
-        next(error_);
+        // ✅ return as-is: newest first (DESC)
+        return res.json(messages);
+    } catch (err) {
+        return next(err);
+    }
+});
+
+// SEARCH messages in DB (required) - newest first
+app.get('/api/messages/search', requireAuth, async (req, res, next) => {
+    try {
+        const q = String(req.query.q || '').trim();
+        const limit = 50;
+
+        if (!q) {
+            // if empty query -> behave like normal messages
+            const messages = await Message.findAll({
+                include: [{ model: User, attributes: ['firstName'] }],
+                order: [['createdAt', 'DESC']],
+                limit,
+            });
+            return res.json(messages);
+        }
+
+        const messages = await Message.findAll({
+            where: {
+                text: { [Op.like]: `%${q}%` },
+            },
+            include: [{ model: User, attributes: ['firstName'] }],
+            order: [['createdAt', 'DESC']],
+            limit,
+        });
+
+        return res.json(messages);
+    } catch (err) {
+        return next(err);
     }
 });
 
 // EDIT message (fetch) - only owner
-app.patch("/api/messages/:id", requireAuth, async (req, res, next) => {
+app.patch('/api/messages/:id', requireAuth, async (req, res, next) => {
     try {
         const id = req.params.id;
-        const text = (req.body.text || "").trim();
+        const text = (req.body.text || '').trim();
 
-        if (!text) return res.status(400).json({ error: "Message text is required" });
-        if (text.length > 500) return res.status(400).json({ error: "Message too long (max 500)" });
+        if (!text) return res.status(400).json({ error: 'Message text is required' });
+        if (text.length > 500) return res.status(400).json({ error: 'Message too long (max 500)' });
 
         const msg = await Message.findByPk(id);
-        if (!msg) return res.status(404).json({ error: "Message not found" });
+        if (!msg) return res.status(404).json({ error: 'Message not found' });
 
         if (msg.userEmail !== req.session.user.email) {
-            return res.status(403).json({ error: "Not allowed" });
+            return res.status(403).json({ error: 'Not allowed' });
         }
 
         msg.text = text;
         await msg.save();
 
         return res.json({ ok: true });
-    } catch (error_) {
-        next(error_);
+    } catch (err) {
+        return next(err);
     }
 });
 
-
-
-app.post("/messages", async (req, res, next) => {
+app.post('/messages', async (req, res, next) => {
     try {
         if (!req.session.user) {
-            return res.redirect("/?msg=" + encodeURIComponent("Please login first"));
+            return res.redirect('/?msg=' + encodeURIComponent('Please login first'));
         }
 
-        const text = (req.body.text || "").trim();
-        if (!text || text.length > 500) return res.redirect("/chat");
+        const text = (req.body.text || '').trim();
+        if (!text || text.length > 500) return res.redirect('/chat');
 
         await Message.create({ text, userEmail: req.session.user.email });
-        return res.redirect("/chat");
+        return res.redirect('/chat');
     } catch (err) {
-        next(err);
+        return next(err);
     }
 });
 
-// DELETE new message
-app.post("/messages/delete", async (req, res, next) => {
+// DELETE one message (form) - only owner (confirm is done on client)
+app.post('/messages/delete', async (req, res, next) => {
     try {
         if (!req.session.user) {
-            return res.redirect("/?msg=" + encodeURIComponent("Please login first"));
+            return res.redirect('/?msg=' + encodeURIComponent('Please login first'));
         }
 
         const id = req.body.id;
         const msg = await Message.findByPk(id);
 
-        if (!msg) return res.redirect("/chat");
-        if (msg.userEmail !== req.session.user.email) return res.redirect("/chat");
+        if (!msg) return res.redirect('/chat');
+        if (msg.userEmail !== req.session.user.email) return res.redirect('/chat');
 
-        await msg.destroy(); // soft delete בגלל paranoid: true
-        return res.redirect("/chat");
-    } catch (error_) {
-        next(error_);
+        await msg.destroy(); // soft delete (paranoid: true)
+        return res.redirect('/chat');
+    } catch (err) {
+        return next(err);
     }
 });
-// DELETE many message
 
-app.post("/api/messages/delete-many", requireAuth, async (req, res, next) => {
+// DELETE many (fetch) - only own
+app.post('/api/messages/delete-many', requireAuth, async (req, res, next) => {
     try {
         let ids = req.body.ids;
 
         if (!Array.isArray(ids)) {
-            return res.status(400).json({ error: "ids must be an array" });
+            return res.status(400).json({ error: 'ids must be an array' });
         }
 
         const cleanIds = ids
@@ -312,22 +331,21 @@ app.post("/api/messages/delete-many", requireAuth, async (req, res, next) => {
             .filter(n => Number.isInteger(n) && n > 0);
 
         if (cleanIds.length === 0) {
-            return res.status(400).json({ error: "No valid ids provided" });
+            return res.status(400).json({ error: 'No valid ids provided' });
         }
 
         await Message.destroy({
             where: {
                 id: cleanIds,
-                userEmail: req.session.user.email, // ✅ מוחק רק שלך
+                userEmail: req.session.user.email,
             },
         });
 
         return res.json({ ok: true, deleted: cleanIds.length });
     } catch (err) {
-        next(err);
+        return next(err);
     }
 });
-
 
 // ====== catch 404 and forward to error handler ======
 app.use(function(req, res, next) {

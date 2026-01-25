@@ -7,7 +7,6 @@
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "cookie": "^1.1.1",
     "cookie-parser": "~1.4.4",
     "debug": "~2.6.9",
     "ejs": "~2.6.1",
@@ -15,7 +14,6 @@
     "express-session": "^1.18.2",
     "http-errors": "~1.6.3",
     "mariadb": "^3.4.5",
-    "morgan": "~1.9.1",
     "mysql2": "^3.16.0",
     "sequelize": "^6.37.7"
   }

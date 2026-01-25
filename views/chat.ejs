@@ -37,7 +37,7 @@
                 <div class="card-body">
 
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div class="text-muted small">Messages (latest 50)</div>
+                        <div class="text-muted small">Messages (latest 50, newest first)</div>
 
                         <div class="d-flex gap-2">
                             <button id="selectAllBtn" type="button" class="btn btn-sm btn-outline-secondary">Select all</button>
@@ -51,7 +51,7 @@
 
                     <div class="d-flex gap-2 align-items-center mb-2">
                         <input id="searchInput" class="form-control form-control-sm"
-                               type="text" placeholder="Search messages..."
+                               type="text" placeholder="Search messages in DB..."
                                autocomplete="off" />
 
                         <button id="prevMatchBtn" type="button" class="btn btn-sm btn-outline-secondary" disabled>
@@ -118,6 +118,11 @@
     // render optimization
     let lastRenderedHash = "";
 
+    function redirectToLogin(reason) {
+        const msg = reason || "Session expired, please login again";
+        window.location.href = "/?msg=" + encodeURIComponent(msg);
+    }
+
     function showError(msg) {
         if (!errorBox) return;
         errorBox.textContent = msg;
@@ -151,6 +156,8 @@
             headers: { "Content-Type": "application/json", "Accept": "application/json" },
             body: JSON.stringify({ ids }),
         });
+
+        if (res.status === 401) return redirectToLogin();
 
         if (!res.ok) {
             const body = await res.json().catch(() => ({}));
@@ -191,17 +198,20 @@
         return Number.isNaN(d.getTime()) ? "" : d.toLocaleString();
     }
 
-    function hashMessages(arr) {
-        // include search text too? not necessary, but we hash message changes
-        return JSON.stringify(arr.map(m => [m.id, m.updatedAt, m.deletedAt]));
+    function hashMessages(arr, q) {
+        return JSON.stringify({
+            q: q || "",
+            rows: arr.map(m => [m.id, m.updatedAt, m.deletedAt])
+        });
     }
 
     function applySearchAndRender() {
-        const q = (searchInput?.value || "").trim().toLowerCase();
+        const q = (searchInput?.value || "").trim();
 
-        filteredMessages = !q
-            ? allMessages
-            : allMessages.filter(m => String(m.text || "").toLowerCase().includes(q));
+        // IMPORTANT:
+        // We now search in DB by fetching from server.
+        // After we got "allMessages" from server, we still use q for highlight + navigation.
+        filteredMessages = allMessages;
 
         matchIds = filteredMessages.map(m => String(m.id));
         currentMatchIndex = matchIds.length ? 0 : -1;
@@ -215,10 +225,7 @@
                 : (q ? "0 matches" : "");
         }
 
-        // Important: render filtered list
-        renderMessages(filteredMessages);
-
-        // and highlight current match
+        renderMessages(filteredMessages, q);
         highlightCurrentMatchInDom();
     }
 
@@ -229,7 +236,6 @@
             .forEach(el => el.classList.remove("current"));
 
         const targetId = matchIds[currentMatchIndex];
-
         const wrapper = messagesBox.querySelector(`[data-msg-id="${CSS.escape(targetId)}"]`);
         if (!wrapper) return;
 
@@ -239,10 +245,10 @@
         wrapper.scrollIntoView({ behavior: "smooth", block: "center" });
     }
 
-    function renderMessages(messages) {
+    function renderMessages(messages, q) {
         if (!messagesBox) return;
 
-        const h = hashMessages(messages);
+        const h = hashMessages(messages, q);
         if (h === lastRenderedHash) return;
         lastRenderedHash = h;
 
@@ -252,8 +258,6 @@
             messagesBox.innerHTML = '<div class="text-muted">No messages yet.</div>';
             return;
         }
-
-        const q = (searchInput?.value || "").trim();
 
         for (const m of messages) {
             const email = (m.userEmail || "").toLowerCase();
@@ -282,7 +286,7 @@
                 const actions = document.createElement("div");
                 actions.className = "mt-2 d-flex gap-2 align-items-center";
 
-                // ✅ MULTI-SELECT checkbox
+                // MULTI-SELECT checkbox
                 const cb = document.createElement("input");
                 cb.type = "checkbox";
                 cb.className = "form-check-input mt-0";
@@ -301,7 +305,7 @@
 
                 actions.appendChild(cb);
 
-                // DELETE (single)
+                // DELETE (single) - with confirm (required)
                 const deleteForm = document.createElement("form");
                 deleteForm.method = "POST";
                 deleteForm.action = "/messages/delete";
@@ -319,6 +323,13 @@
 
                 deleteForm.appendChild(hiddenId1);
                 deleteForm.appendChild(trashBtn);
+
+                // ✅ Confirm with message text (as required)
+                deleteForm.addEventListener("submit", (e) => {
+                    const preview = (m.text || "").trim();
+                    const ok = confirm(`Are you sure? Deleting a message cannot be undone.\n\nMessage:\n"${preview}"`);
+                    if (!ok) e.preventDefault();
+                });
 
                 // EDIT (fetch)
                 const editBtn = document.createElement("button");
@@ -371,6 +382,8 @@
                             body: JSON.stringify({ text: trimmed }),
                         });
 
+                        if (res.status === 401) return redirectToLogin();
+
                         if (!res.ok) {
                             const body = await res.json().catch(() => ({}));
                             showError(body.error || `Failed to edit message (${res.status})`);
@@ -404,23 +417,40 @@
             messagesBox.appendChild(wrapper);
         }
 
-        messagesBox.scrollTop = messagesBox.scrollHeight;
+        // Newest-first: keep scroll at top
+        messagesBox.scrollTop = 0;
+    }
+
+    // Fetch messages (either normal or DB-search)
+    async function fetchMessagesFromServer(q) {
+        const url = q
+            ? `/api/messages/search?q=${encodeURIComponent(q)}`
+            : `/api/messages`;
+
+        const res = await fetch(url, { headers: { "Accept": "application/json" } });
+
+        if (res.status === 401) {
+            redirectToLogin();
+            return null;
+        }
+
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            showError(body.error || `Failed to load messages (${res.status})`);
+            return null;
+        }
+
+        return await res.json();
     }
 
     async function loadMessages() {
         clearError();
 
-        const res = await fetch("/api/messages", { headers: { "Accept": "application/json" } });
-        if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            showError(body.error || `Failed to load messages (${res.status})`);
-            return;
-        }
+        const q = (searchInput?.value || "").trim();
+        const messages = await fetchMessagesFromServer(q);
+        if (!messages) return;
 
-        const messages = await res.json();
         allMessages = messages;
-
-        // use search state
         applySearchAndRender();
     }
 
@@ -429,7 +459,6 @@
 
     if (selectAllBtn) {
         selectAllBtn.addEventListener("click", () => {
-            // select only visible (filtered) messages that are mine
             selectedIds.clear();
 
             for (const m of filteredMessages) {
@@ -463,9 +492,12 @@
         deleteSelectedBtn.addEventListener("click", () => void deleteSelected());
     }
 
+    // Search in DB: fetch on input (debounced)
+    let searchTimer = null;
     if (searchInput) {
         searchInput.addEventListener("input", () => {
-            applySearchAndRender();
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => void loadMessages(), 250);
         });
 
         searchInput.addEventListener("keydown", (e) => {
