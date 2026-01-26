@@ -1,6 +1,9 @@
 // models/Message.js
+
+// Import Sequelize data types for defining the Message model schema.
 const { DataTypes } = require('sequelize');
 
+// Factory function that defines and returns the Message model.
 function defineMessage(sequelize) {
 
     const Message = sequelize.define(

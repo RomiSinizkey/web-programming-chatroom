@@ -3,12 +3,14 @@
 
 const BCRYPT_ROUNDS = 10;
 
+// JSDoc typedefs for better IntelliSense/type checking in editors (no runtime impact).
 /** @typedef {import('express').Request} Request */
 /** @typedef {import('express').Response} Response */
 /** @typedef {import('express').NextFunction} NextFunction */
 /** @typedef {import('express').RequestHandler} RequestHandler */
 /** @typedef {import('express').ErrorRequestHandler} ErrorRequestHandler */
 
+// Import core libraries and middleware: logging, cookies, sessions, hashing, and DB utilities
 const createError = require('http-errors');
 const express = require('express');
 const path = require('path');
@@ -18,6 +20,7 @@ const session = require('express-session');
 const bcrypt = require('bcrypt');
 const { Op } = require('sequelize');
 
+// Load DB initialization and Sequelize models
 const { initDb, User, Message } = require('./models');
 
 const app = express();
@@ -27,17 +30,13 @@ initDb().catch((err) => {
     process.exit(1);
 });
 
-// ====== CONSTS for Part A ======
+// ====== CONSTS =======
 const TIMEOUT_REGISTER = 30 * 1000; // 30 seconds
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // xxx@xxx.xxx
+const nameRegex = /^[A-Za-z]{3,32}$/;//xxx size between 3-32
 
-// ====== Validation rules ======
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const nameRegex = /^[A-Za-z]{3,32}$/;
 
-/**
- * Safely read registerData cookie (cookie-parser can decode JSON cookies)
- * @param {Request} req
- */
+// Safely read the "registerData" cookie
 function getRegisterData(req) {
     const data = req.cookies && req.cookies.registerData ? req.cookies.registerData : null;
     return data && typeof data === 'object' ? data : null;
@@ -52,7 +51,6 @@ app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
-
 app.use(
     session({
         secret: process.env.SESSION_SECRET || 'dev-secret-change-later',
@@ -62,7 +60,6 @@ app.use(
         // cookie: { sameSite: 'lax' },
     })
 );
-
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ====== ROUTES (Part A) ======
@@ -76,6 +73,7 @@ const rootHandler = (req, res) => {
     const msg = req.query.msg || null;
     return res.render('login', { message: msg });
 };
+// Home route: show login page for guests; redirect logged-in users to /chat.
 app.get('/', rootHandler);
 
 /** @type {RequestHandler} */
@@ -106,6 +104,7 @@ const loginHandler = async (req, res, next) => {
         return next(err);
     }
 };
+// Login handler: validate user credentials and store minimal user profile in the session.
 app.post('/login', loginHandler);
 
 /** @type {RequestHandler} */
@@ -115,6 +114,7 @@ const chatHandler = (req, res) => {
     }
     return res.render('chat', { user: req.session.user });
 };
+// Chat page: requires an active session; otherwise redirects back to login.
 app.get('/chat', chatHandler);
 
 // GET /register -> step 1
@@ -124,6 +124,7 @@ const registerStep1 = (req, res) => {
     const error = req.query.err || null;
     return res.render('register', { step: 1, data, error });
 };
+// Registration step 1: show basic user details form: email + first +last name
 app.get('/register', registerStep1);
 
 // POST /register -> validate + save cookie + go to step2
@@ -131,8 +132,8 @@ app.get('/register', registerStep1);
 const registerStep1Post = async (req, res, next) => {
     try {
         const email = String(req.body.email || '').trim().toLowerCase();
-        const firstName = String(req.body.firstName || '').trim().toLowerCase();
-        const lastName = String(req.body.lastName || '').trim().toLowerCase();
+        const firstName = String(req.body.firstName || '').trim();
+        const lastName = String(req.body.lastName || '').trim();
 
         if (!email || !firstName || !lastName) {
             return res.redirect('/register?err=' + encodeURIComponent('All fields are required'));
@@ -165,6 +166,7 @@ const registerStep1Post = async (req, res, next) => {
         return next(err);
     }
 };
+// Registration step 1 submit: validate inputs check email uniqueness then store data in a short life cookie.
 app.post('/register', registerStep1Post);
 
 // GET /register/password -> step 2
@@ -182,9 +184,9 @@ const registerStep2 = (req, res) => {
 
     return res.render('register', { step: 2, data, error });
 };
+// Registration step 2: requires registerData cookie and enforces a 30 seconds timeout.
 app.get('/register/password', registerStep2);
 
-// POST /register/password -> finish registration
 /** @type {RequestHandler} */
 const registerStep2Post = async (req, res, next) => {
     try {
@@ -234,6 +236,7 @@ const registerStep2Post = async (req, res, next) => {
         return next(err);
     }
 };
+// Registration finish: validate passwords hash with bcrypt create the user in DB then clear registerData cookie
 app.post('/register/password', registerStep2Post);
 
 /** @type {RequestHandler} */
@@ -244,10 +247,11 @@ const logoutHandler = (req, res) => {
         return res.redirect('/?msg=' + encodeURIComponent('Logged out'));
     });
 };
+// Logout: destroy the session and clear the session cookie.
 app.get('/logout', logoutHandler);
 
 // ====== ROUTES (Part B) ======
-
+// API auth guard: ensures the user has an active session returns 401 JSON if not
 /** @type {RequestHandler} */
 function requireAuth(req, res, next) {
     if (!req.session.user) {
@@ -256,14 +260,15 @@ function requireAuth(req, res, next) {
     return next();
 }
 
-// GET messages (latest 50) - NEWEST FIRST (DESC)
+// Fetch latest messages for the chat (includes sender's firstName via JOIN).
 app.get('/api/messages', requireAuth, async (req, res, next) => {
     try {
         const limit = 50;
-
+        //Note: if you want to have a Whatsapp like chat, replace all DESC with ASC
+        //and remove the note in chat.ejs where "only auto-scroll when not searchin"
         const messages = await Message.findAll({
             include: [{ model: User, attributes: ['firstName'] }],
-            order: [['createdAt', 'ASC']],
+            order: [['createdAt', 'DESC']],
             limit,
         });
 
@@ -273,7 +278,7 @@ app.get('/api/messages', requireAuth, async (req, res, next) => {
     }
 });
 
-// SEARCH messages in DB (required) - newest first
+// Search messages by substring (SQL LIKE). If query is empty, returns regular message list.
 app.get('/api/messages/search', requireAuth, async (req, res, next) => {
     try {
         const q = String(req.query.q || '').trim();
@@ -282,7 +287,7 @@ app.get('/api/messages/search', requireAuth, async (req, res, next) => {
         if (!q) {
             const messages = await Message.findAll({
                 include: [{ model: User, attributes: ['firstName'] }],
-                order: [['createdAt', 'ASC']],
+                order: [['createdAt', 'DESC']],
                 limit,
             });
             return res.json(messages);
@@ -291,7 +296,7 @@ app.get('/api/messages/search', requireAuth, async (req, res, next) => {
         const messages = await Message.findAll({
             where: { text: { [Op.like]: `%${q}%` } },
             include: [{ model: User, attributes: ['firstName'] }],
-            order: [['createdAt', 'ASC']],
+            order: [['createdAt', 'DESC']],
             limit,
         });
 
@@ -301,7 +306,7 @@ app.get('/api/messages/search', requireAuth, async (req, res, next) => {
     }
 });
 
-// EDIT message (fetch/PATCH) - only owner
+// Edit a message (owner-only): validates content, checks ownership, then updates text.
 app.patch('/api/messages/:id', requireAuth, async (req, res, next) => {
     try {
         const id = req.params.id;
@@ -326,7 +331,7 @@ app.patch('/api/messages/:id', requireAuth, async (req, res, next) => {
     }
 });
 
-// POST message (AJAX) - so page won't refresh on send
+// Create a new message via AJAX (returns JSON so the page doesn't refresh).
 app.post('/api/messages', requireAuth, async (req, res, next) => {
     try {
         const text = String(req.body.text || '').trim();
@@ -341,6 +346,7 @@ app.post('/api/messages', requireAuth, async (req, res, next) => {
     }
 });
 
+// Fallback form-based message creation (redirects back to /chat).
 app.post('/messages', async (req, res, next) => {
     try {
         if (!req.session.user) {
@@ -357,7 +363,7 @@ app.post('/messages', async (req, res, next) => {
     }
 });
 
-// DELETE one message (form) - only owner (confirm is done on client)
+// Delete a single message via form (owner only). Uses soft delete (paranoid).
 app.post('/messages/delete', async (req, res, next) => {
     try {
         if (!req.session.user) {
@@ -377,7 +383,7 @@ app.post('/messages/delete', async (req, res, next) => {
     }
 });
 
-// DELETE many (fetch) - only own
+// Bulk delete messages (owner-only): validates id list, then deletes matching messages for the current user.
 app.post('/api/messages/delete-many', requireAuth, async (req, res, next) => {
     try {
         const ids = req.body.ids;
@@ -404,17 +410,17 @@ app.post('/api/messages/delete-many', requireAuth, async (req, res, next) => {
     }
 });
 
-// ✅ Ignore Chrome DevTools noise (prevents 404 logs)
+// Ignore Chrome DevTools auto-request to reduce noisy 404 logs.
 app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => {
     return res.status(204).end();
 });
 
-// ====== catch 404 and forward to error handler ======
+// Catch-all 404: forward to the error handler.
 /** @type {RequestHandler} */
 const notFound = (req, res, next) => next(createError(404));
 app.use(notFound);
 
-// ====== error handler ======
+// Central error handler: renders the error page (shows stack only in development).
 /** @type {ErrorRequestHandler} */
 const errorHandler = (err, req, res, _next) => {
     res.locals.message = err.message;
@@ -423,5 +429,5 @@ const errorHandler = (err, req, res, _next) => {
     res.render('error');
 };
 app.use(errorHandler);
-
+// Export the app for bin/www (server startup entry point).
 module.exports = app;

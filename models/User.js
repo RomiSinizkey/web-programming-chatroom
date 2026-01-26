@@ -1,6 +1,9 @@
 // models/User.js
+
+// Import Sequelize data types used to define model columns.
 const { DataTypes } = require('sequelize');
 
+// Model factory: defines and returns the User model using the provided Sequelize instance.
 function defineUser(sequelize) {
     const User = sequelize.define(
         'User',

@@ -102,20 +102,16 @@ const user = (locals && locals.user) ? locals.user : { email:"", firstName:"", l
     /* global window, document, fetch, confirm, setTimeout, clearTimeout */
 
     const currentUserEmail = "<%= String(user.email || '') %>";
-
     const messagesBox = document.getElementById("messagesBox");
     const errorBox = document.getElementById("errorBox");
     const refreshBtn = document.getElementById("refreshBtn");
     const selectAllBtn = document.getElementById("selectAllBtn");
     const clearAllBtn = document.getElementById("clearAllBtn");
     const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
-
     const searchInput = document.getElementById("searchInput");
     const prevMatchBtn = document.getElementById("prevMatchBtn");
     const nextMatchBtn = document.getElementById("nextMatchBtn");
     const matchInfo = document.getElementById("matchInfo");
-
-    // ✅ missing in your code:
     const sendForm = document.getElementById("sendForm");
     const msgInput = document.getElementById("msgInput");
 
@@ -225,7 +221,7 @@ const user = (locals && locals.user) ? locals.user : { email:"", firstName:"", l
         highlightCurrentMatchInDom();
     }
 
-    // ✅ scroll ONLY inside the chat box (never the whole page)
+    //scroll only inside the chat box
     function highlightCurrentMatchInDom() {
         if (!messagesBox) return;
         if (currentMatchIndex < 0 || !matchIds.length) return;
@@ -254,6 +250,13 @@ const user = (locals && locals.user) ? locals.user : { email:"", firstName:"", l
         }
     }
 
+
+    // Render messages list into the DOM.
+    // Creates message bubbles and (for the current user's messages only) adds:
+    // - checkbox for bulk delete
+    // - delete form (POST /messages/delete) with confirm()
+    // - edit button that uses PATCH /api/messages/:id
+    // Also auto-scrolls to bottom only when NOT searching.
     function renderMessages(messages, q) {
         if (!messagesBox) return;
 
@@ -422,12 +425,14 @@ const user = (locals && locals.user) ? locals.user : { email:"", firstName:"", l
             messagesBox.appendChild(wrapper);
         }
 
-        // ✅ real chat behavior:
-        // only auto-scroll when NOT searching
-        if (!q) {
-            messagesBox.scrollTop = messagesBox.scrollHeight;
-        }
+        // only auto-scroll when not searchin
+        //   if (!q) {
+        //  messagesBox.scrollTop = messagesBox.scrollHeight;
+        // }
     }
+    // API fetch helper:
+    // Uses /api/messages or /api/messages/search based on query.
+    // If session expired (401), redirect back to login.
 
     async function fetchMessagesFromServer(q) {
         const url = q
@@ -528,7 +533,8 @@ const user = (locals && locals.user) ? locals.user : { email:"", firstName:"", l
         });
     }
 
-    // ✅ BONUS: send without page reload (no jump to top)
+    // AJAX send:
+    // Prevent default form submit (no page reload) and POST JSON to /api/messages instead.
     if (sendForm && msgInput) {
         sendForm.addEventListener("submit", async (e) => {
             e.preventDefault();

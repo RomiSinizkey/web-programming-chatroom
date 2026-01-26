@@ -1,9 +1,12 @@
 // models/index.js
+
+// Import Sequelize ORM to manage database connections and models.
 const { Sequelize } = require('sequelize');
+// Import model factory functions for User and Message models.
 const { defineUser } = require('./User');
 const { defineMessage } = require('./Message');
 
-// update by the DOCKER (env)
+// Read database configuration from environment variables (DOCKER) or defaults.
 const DB_NAME = process.env.DB_NAME || 'mydb';
 const DB_USER = process.env.DB_USER || 'internet';
 const DB_PASS = process.env.DB_PASS || 'internet';
@@ -29,7 +32,6 @@ async function initDb() {
     await sequelize.authenticate();
     console.log('DB connected');
 
-    // יוצר טבלאות אם לא קיימות
     await sequelize.sync();
     console.log('DB synced');
 }
