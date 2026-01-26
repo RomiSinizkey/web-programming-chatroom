@@ -1,13 +1,24 @@
+// app.js
+// @ts-check
+
 const BCRYPT_ROUNDS = 10;
+
+/** @typedef {import('express').Request} Request */
+/** @typedef {import('express').Response} Response */
+/** @typedef {import('express').NextFunction} NextFunction */
+/** @typedef {import('express').RequestHandler} RequestHandler */
+/** @typedef {import('express').ErrorRequestHandler} ErrorRequestHandler */
+
 const createError = require('http-errors');
 const express = require('express');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 const session = require('express-session');
-const { initDb, User, Message } = require('./models');
 const bcrypt = require('bcrypt');
 const { Op } = require('sequelize');
+
+const { initDb, User, Message } = require('./models');
 
 const app = express();
 
@@ -21,8 +32,16 @@ const TIMEOUT_REGISTER = 30 * 1000; // 30 seconds
 
 // ====== Validation rules ======
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// ✅ per requirements: letters only, 3-32
 const nameRegex = /^[A-Za-z]{3,32}$/;
+
+/**
+ * Safely read registerData cookie (cookie-parser can decode JSON cookies)
+ * @param {Request} req
+ */
+function getRegisterData(req) {
+    const data = req.cookies && req.cookies.registerData ? req.cookies.registerData : null;
+    return data && typeof data === 'object' ? data : null;
+}
 
 // ====== view engine setup ======
 app.set('views', path.join(__dirname, 'views'));
@@ -34,29 +53,36 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'dev-secret-change-later',
-    resave: false,
-    saveUninitialized: false,
-}));
+app.use(
+    session({
+        secret: process.env.SESSION_SECRET || 'dev-secret-change-later',
+        resave: false,
+        saveUninitialized: false,
+        // optional but nice:
+        // cookie: { sameSite: 'lax' },
+    })
+);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ====== ROUTES (Part A) ======
 
 // GET / -> login page
-app.get('/', (req, res) => {
+/** @type {RequestHandler} */
+const rootHandler = (req, res) => {
     if (req.session.user) {
         return res.redirect('/chat');
     }
     const msg = req.query.msg || null;
-    res.render('login', { message: msg });
-});
+    return res.render('login', { message: msg });
+};
+app.get('/', rootHandler);
 
-app.post('/login', async (req, res, next) => {
+/** @type {RequestHandler} */
+const loginHandler = async (req, res, next) => {
     try {
-        const email = (req.body.email || '').trim().toLowerCase();
-        const password = (req.body.password || '').trim();
+        const email = String(req.body.email || '').trim().toLowerCase();
+        const password = String(req.body.password || '').trim();
 
         const user = await User.findByPk(email);
 
@@ -79,28 +105,34 @@ app.post('/login', async (req, res, next) => {
     } catch (err) {
         return next(err);
     }
-});
+};
+app.post('/login', loginHandler);
 
-app.get('/chat', (req, res) => {
+/** @type {RequestHandler} */
+const chatHandler = (req, res) => {
     if (!req.session.user) {
         return res.redirect('/?msg=' + encodeURIComponent('Please login first'));
     }
-    res.render('chat', { user: req.session.user });
-});
+    return res.render('chat', { user: req.session.user });
+};
+app.get('/chat', chatHandler);
 
 // GET /register -> step 1
-app.get('/register', (req, res) => {
-    const data = req.cookies.registerData || {};
+/** @type {RequestHandler} */
+const registerStep1 = (req, res) => {
+    const data = getRegisterData(req) || {};
     const error = req.query.err || null;
-    res.render('register', { step: 1, data, error });
-});
+    return res.render('register', { step: 1, data, error });
+};
+app.get('/register', registerStep1);
 
 // POST /register -> validate + save cookie + go to step2
-app.post('/register', async (req, res, next) => {
+/** @type {RequestHandler} */
+const registerStep1Post = async (req, res, next) => {
     try {
-        const email = (req.body.email || '').trim().toLowerCase();
-        const firstName = (req.body.firstName || '').trim().toLowerCase();
-        const lastName = (req.body.lastName || '').trim().toLowerCase();
+        const email = String(req.body.email || '').trim().toLowerCase();
+        const firstName = String(req.body.firstName || '').trim().toLowerCase();
+        const lastName = String(req.body.lastName || '').trim().toLowerCase();
 
         if (!email || !firstName || !lastName) {
             return res.redirect('/register?err=' + encodeURIComponent('All fields are required'));
@@ -109,31 +141,36 @@ app.post('/register', async (req, res, next) => {
             return res.redirect('/register?err=' + encodeURIComponent('Invalid email format'));
         }
         if (!nameRegex.test(firstName) || !nameRegex.test(lastName)) {
-            return res.redirect('/register?err=' + encodeURIComponent('Name must contain only letters and be 3-32 characters'));
+            return res.redirect(
+                '/register?err=' +
+                encodeURIComponent('Name must contain only letters and be 3-32 characters')
+            );
         }
 
         const exists = await User.findByPk(email);
         if (exists) {
-            return res.redirect('/register?err=' + encodeURIComponent('this email is already in use, please choose another one'));
+            return res.redirect(
+                '/register?err=' + encodeURIComponent('this email is already in use, please choose another one')
+            );
         }
 
-        // cookie saved for TIMEOUT_REGISTER from NOW (start of step2)
-        res.cookie('registerData', {
-            email,
-            firstName,
-            lastName,
-            createdAt: Date.now()
-        }, { maxAge: TIMEOUT_REGISTER });
+        res.cookie(
+            'registerData',
+            { email, firstName, lastName, createdAt: Date.now() },
+            { maxAge: TIMEOUT_REGISTER }
+        );
 
         return res.redirect('/register/password');
     } catch (err) {
         return next(err);
     }
-});
+};
+app.post('/register', registerStep1Post);
 
 // GET /register/password -> step 2
-app.get('/register/password', (req, res) => {
-    const data = req.cookies.registerData;
+/** @type {RequestHandler} */
+const registerStep2 = (req, res) => {
+    const data = getRegisterData(req);
     const error = req.query.err || null;
 
     if (!data) return res.redirect('/register');
@@ -143,15 +180,17 @@ app.get('/register/password', (req, res) => {
         return res.redirect('/register?err=' + encodeURIComponent('Registration timed out, please start again'));
     }
 
-    res.render('register', { step: 2, data, error });
-});
+    return res.render('register', { step: 2, data, error });
+};
+app.get('/register/password', registerStep2);
 
 // POST /register/password -> finish registration
-app.post('/register/password', async (req, res, next) => {
+/** @type {RequestHandler} */
+const registerStep2Post = async (req, res, next) => {
     try {
-        const data = req.cookies.registerData;
-        const pass1 = (req.body.password || '').trim();
-        const pass2 = (req.body.password2 || '').trim();
+        const data = getRegisterData(req);
+        const pass1 = String(req.body.password || '').trim();
+        const pass2 = String(req.body.password2 || '').trim();
 
         if (!data) return res.redirect('/register');
 
@@ -167,21 +206,25 @@ app.post('/register/password', async (req, res, next) => {
             return res.redirect('/register/password?err=' + encodeURIComponent('Passwords do not match'));
         }
         if (pass1.length < 3 || pass1.length > 32) {
-            return res.redirect('/register/password?err=' + encodeURIComponent('Password must be between 3 and 32 characters'));
+            return res.redirect(
+                '/register/password?err=' + encodeURIComponent('Password must be between 3 and 32 characters')
+            );
         }
 
-        const exists = await User.findByPk((data.email || '').toLowerCase());
+        const exists = await User.findByPk(String(data.email || '').toLowerCase());
         if (exists) {
             res.clearCookie('registerData');
-            return res.redirect('/register?err=' + encodeURIComponent('this email is already in use, please choose another one'));
+            return res.redirect(
+                '/register?err=' + encodeURIComponent('this email is already in use, please choose another one')
+            );
         }
 
         const hashed = await bcrypt.hash(pass1, BCRYPT_ROUNDS);
 
         await User.create({
-            email: (data.email || '').toLowerCase(),
-            firstName: (data.firstName || '').toLowerCase(),
-            lastName: (data.lastName || '').toLowerCase(),
+            email: String(data.email || '').toLowerCase(),
+            firstName: String(data.firstName || '').toLowerCase(),
+            lastName: String(data.lastName || '').toLowerCase(),
             password: hashed,
         });
 
@@ -190,21 +233,27 @@ app.post('/register/password', async (req, res, next) => {
     } catch (err) {
         return next(err);
     }
-});
+};
+app.post('/register/password', registerStep2Post);
 
-app.get('/logout', (req, res) => {
+/** @type {RequestHandler} */
+const logoutHandler = (req, res) => {
+    // clear cookie + destroy session
     req.session.destroy(() => {
+        res.clearCookie('connect.sid'); // default cookie name of express-session
         return res.redirect('/?msg=' + encodeURIComponent('Logged out'));
     });
-});
+};
+app.get('/logout', logoutHandler);
 
 // ====== ROUTES (Part B) ======
 
+/** @type {RequestHandler} */
 function requireAuth(req, res, next) {
     if (!req.session.user) {
         return res.status(401).json({ error: 'Session expired. Please login again.' });
     }
-    next();
+    return next();
 }
 
 // GET messages (latest 50) - NEWEST FIRST (DESC)
@@ -214,11 +263,10 @@ app.get('/api/messages', requireAuth, async (req, res, next) => {
 
         const messages = await Message.findAll({
             include: [{ model: User, attributes: ['firstName'] }],
-            order: [['createdAt', 'DESC']],
+            order: [['createdAt', 'ASC']],
             limit,
         });
 
-        // ✅ return as-is: newest first (DESC)
         return res.json(messages);
     } catch (err) {
         return next(err);
@@ -232,21 +280,18 @@ app.get('/api/messages/search', requireAuth, async (req, res, next) => {
         const limit = 50;
 
         if (!q) {
-            // if empty query -> behave like normal messages
             const messages = await Message.findAll({
                 include: [{ model: User, attributes: ['firstName'] }],
-                order: [['createdAt', 'DESC']],
+                order: [['createdAt', 'ASC']],
                 limit,
             });
             return res.json(messages);
         }
 
         const messages = await Message.findAll({
-            where: {
-                text: { [Op.like]: `%${q}%` },
-            },
+            where: { text: { [Op.like]: `%${q}%` } },
             include: [{ model: User, attributes: ['firstName'] }],
-            order: [['createdAt', 'DESC']],
+            order: [['createdAt', 'ASC']],
             limit,
         });
 
@@ -256,11 +301,11 @@ app.get('/api/messages/search', requireAuth, async (req, res, next) => {
     }
 });
 
-// EDIT message (fetch) - only owner
+// EDIT message (fetch/PATCH) - only owner
 app.patch('/api/messages/:id', requireAuth, async (req, res, next) => {
     try {
         const id = req.params.id;
-        const text = (req.body.text || '').trim();
+        const text = String(req.body.text || '').trim();
 
         if (!text) return res.status(400).json({ error: 'Message text is required' });
         if (text.length > 500) return res.status(400).json({ error: 'Message too long (max 500)' });
@@ -281,13 +326,28 @@ app.patch('/api/messages/:id', requireAuth, async (req, res, next) => {
     }
 });
 
+// POST message (AJAX) - so page won't refresh on send
+app.post('/api/messages', requireAuth, async (req, res, next) => {
+    try {
+        const text = String(req.body.text || '').trim();
+
+        if (!text) return res.status(400).json({ error: 'Message text is required' });
+        if (text.length > 500) return res.status(400).json({ error: 'Message too long (max 500)' });
+
+        const msg = await Message.create({ text, userEmail: req.session.user.email });
+        return res.json({ ok: true, id: msg.id });
+    } catch (err) {
+        return next(err);
+    }
+});
+
 app.post('/messages', async (req, res, next) => {
     try {
         if (!req.session.user) {
             return res.redirect('/?msg=' + encodeURIComponent('Please login first'));
         }
 
-        const text = (req.body.text || '').trim();
+        const text = String(req.body.text || '').trim();
         if (!text || text.length > 500) return res.redirect('/chat');
 
         await Message.create({ text, userEmail: req.session.user.email });
@@ -320,25 +380,22 @@ app.post('/messages/delete', async (req, res, next) => {
 // DELETE many (fetch) - only own
 app.post('/api/messages/delete-many', requireAuth, async (req, res, next) => {
     try {
-        let ids = req.body.ids;
+        const ids = req.body.ids;
 
         if (!Array.isArray(ids)) {
             return res.status(400).json({ error: 'ids must be an array' });
         }
 
         const cleanIds = ids
-            .map(x => parseInt(x, 10))
-            .filter(n => Number.isInteger(n) && n > 0);
+            .map((x) => parseInt(String(x), 10))
+            .filter((n) => Number.isInteger(n) && n > 0);
 
         if (cleanIds.length === 0) {
             return res.status(400).json({ error: 'No valid ids provided' });
         }
 
         await Message.destroy({
-            where: {
-                id: cleanIds,
-                userEmail: req.session.user.email,
-            },
+            where: { id: cleanIds, userEmail: req.session.user.email },
         });
 
         return res.json({ ok: true, deleted: cleanIds.length });
@@ -347,17 +404,24 @@ app.post('/api/messages/delete-many', requireAuth, async (req, res, next) => {
     }
 });
 
-// ====== catch 404 and forward to error handler ======
-app.use(function(req, res, next) {
-    next(createError(404));
+// ✅ Ignore Chrome DevTools noise (prevents 404 logs)
+app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => {
+    return res.status(204).end();
 });
 
+// ====== catch 404 and forward to error handler ======
+/** @type {RequestHandler} */
+const notFound = (req, res, next) => next(createError(404));
+app.use(notFound);
+
 // ====== error handler ======
-app.use(function(err, req, res, next) {
+/** @type {ErrorRequestHandler} */
+const errorHandler = (err, req, res, _next) => {
     res.locals.message = err.message;
     res.locals.error = req.app.get('env') === 'development' ? err : {};
     res.status(err.status || 500);
     res.render('error');
-});
+};
+app.use(errorHandler);
 
 module.exports = app;

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-
     <meta charset="utf-8" />
     <title>Chatroom</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+
     <link
             href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
             rel="stylesheet"
@@ -12,13 +12,18 @@
     <link
             rel="stylesheet"
             href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
-    />
+    >
 
-    <link rel="stylesheet" href="/style.css">
-
+    <link rel="stylesheet" href="/stylesheets/style.css">
 </head>
 
 <body class="bg-light">
+
+<%
+// noinspection JSUnresolvedReference,JSUnresolvedVariable,JSCheckFunctionSignatures
+const user = (locals && locals.user) ? locals.user : { email:"", firstName:"", lastName:"" };
+%>
+
 <div class="container py-5">
     <div class="row justify-content-center">
         <div class="col-12 col-md-10 col-lg-8">
@@ -37,7 +42,7 @@
                 <div class="card-body">
 
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div class="text-muted small">Messages (latest 50, newest first)</div>
+                        <div class="text-muted small">Messages (latest 50)</div>
 
                         <div class="d-flex gap-2">
                             <button id="selectAllBtn" type="button" class="btn btn-sm btn-outline-secondary">Select all</button>
@@ -50,16 +55,15 @@
                     </div>
 
                     <div class="d-flex gap-2 align-items-center mb-2">
-                        <input id="searchInput" class="form-control form-control-sm"
-                               type="text" placeholder="Search messages in DB..."
-                               autocomplete="off" />
+                        <label for="searchInput" class="visually-hidden">Search messages</label>
+                        <input
+                                id="searchInput" class="form-control form-control-sm"
+                                type="text" placeholder="Search messages in DB..."
+                                autocomplete="off"
+                        />
 
-                        <button id="prevMatchBtn" type="button" class="btn btn-sm btn-outline-secondary" disabled>
-                            Prev
-                        </button>
-                        <button id="nextMatchBtn" type="button" class="btn btn-sm btn-outline-secondary" disabled>
-                            Next
-                        </button>
+                        <button id="prevMatchBtn" type="button" class="btn btn-sm btn-outline-secondary" disabled>Prev</button>
+                        <button id="nextMatchBtn" type="button" class="btn btn-sm btn-outline-secondary" disabled>Next</button>
 
                         <div id="matchInfo" class="text-muted small ms-1"></div>
                     </div>
@@ -77,7 +81,6 @@
                                 placeholder="Type a message..."
                                 required
                         />
-
                         <button id="sendBtn" class="btn btn-primary" type="submit">Send</button>
                     </form>
 
@@ -91,11 +94,17 @@
 </div>
 
 <script>
-    const currentUserEmail = "<%= user.email %>";
+    /**
+     * Browser JS (NOT Node).
+     * @typedef {{ id:number, text:string, userEmail:string, createdAt:string, updatedAt:string, deletedAt:(string|null), User?:{firstName?:string} }} ChatMessage
+     */
+
+    /* global window, document, fetch, confirm, setTimeout, clearTimeout */
+
+    const currentUserEmail = "<%= String(user.email || '') %>";
 
     const messagesBox = document.getElementById("messagesBox");
     const errorBox = document.getElementById("errorBox");
-    const msgInput = document.getElementById("msgInput");
     const refreshBtn = document.getElementById("refreshBtn");
     const selectAllBtn = document.getElementById("selectAllBtn");
     const clearAllBtn = document.getElementById("clearAllBtn");
@@ -106,17 +115,28 @@
     const nextMatchBtn = document.getElementById("nextMatchBtn");
     const matchInfo = document.getElementById("matchInfo");
 
-    // messages state
+    // ✅ missing in your code:
+    const sendForm = document.getElementById("sendForm");
+    const msgInput = document.getElementById("msgInput");
+
+    /** @type {ChatMessage[]} */
     let allMessages = [];
+    /** @type {ChatMessage[]} */
     let filteredMessages = [];
+
+    /** @type {string[]} */
     let matchIds = [];
     let currentMatchIndex = -1;
 
-    // selection state (for multi delete)
+    /** @type {Set<string>} */
     const selectedIds = new Set();
 
-    // render optimization
     let lastRenderedHash = "";
+
+    function safeCssEscape(s) {
+        if (window.CSS && typeof window.CSS.escape === "function") return window.CSS.escape(String(s));
+        return String(s).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+    }
 
     function redirectToLogin(reason) {
         const msg = reason || "Session expired, please login again";
@@ -143,33 +163,6 @@
             : `Delete selected (${selectedIds.size})`;
     }
 
-    async function deleteSelected() {
-        if (selectedIds.size === 0) return;
-        if (!confirm(`Delete ${selectedIds.size} selected messages?`)) return;
-
-        clearError();
-
-        const ids = Array.from(selectedIds);
-
-        const res = await fetch("/api/messages/delete-many", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Accept": "application/json" },
-            body: JSON.stringify({ ids }),
-        });
-
-        if (res.status === 401) return redirectToLogin();
-
-        if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            showError(body.error || `Failed to delete messages (${res.status})`);
-            return;
-        }
-
-        selectedIds.clear();
-        updateDeleteSelectedUI();
-        await loadMessages();
-    }
-
     function escapeHtml(str) {
         return String(str)
             .replaceAll("&", "&amp;")
@@ -187,7 +180,6 @@
         const safe = escapeHtml(text || "");
         const q = (query || "").trim();
         if (!q) return safe;
-
         const re = new RegExp(escapeRegex(q), "gi");
         return safe.replace(re, (m) => `<mark class="chat-highlight">${m}</mark>`);
     }
@@ -206,14 +198,18 @@
     }
 
     function applySearchAndRender() {
-        const q = (searchInput?.value || "").trim();
-
-        // IMPORTANT:
-        // We now search in DB by fetching from server.
-        // After we got "allMessages" from server, we still use q for highlight + navigation.
+        const q = (searchInput && searchInput.value ? searchInput.value : "").trim();
         filteredMessages = allMessages;
 
-        matchIds = filteredMessages.map(m => String(m.id));
+        if (q) {
+            const qLower = q.toLowerCase();
+            matchIds = filteredMessages
+                .filter(m => String(m.text || "").toLowerCase().includes(qLower))
+                .map(m => String(m.id));
+        } else {
+            matchIds = [];
+        }
+
         currentMatchIndex = matchIds.length ? 0 : -1;
 
         if (prevMatchBtn) prevMatchBtn.disabled = matchIds.length === 0;
@@ -229,20 +225,33 @@
         highlightCurrentMatchInDom();
     }
 
+    // ✅ scroll ONLY inside the chat box (never the whole page)
     function highlightCurrentMatchInDom() {
+        if (!messagesBox) return;
         if (currentMatchIndex < 0 || !matchIds.length) return;
 
-        document.querySelectorAll("mark.chat-highlight.current")
+        messagesBox.querySelectorAll("mark.chat-highlight.current")
             .forEach(el => el.classList.remove("current"));
 
         const targetId = matchIds[currentMatchIndex];
-        const wrapper = messagesBox.querySelector(`[data-msg-id="${CSS.escape(targetId)}"]`);
+        const wrapper = messagesBox.querySelector(`[data-msg-id="${safeCssEscape(targetId)}"]`);
         if (!wrapper) return;
 
         const firstMark = wrapper.querySelector("mark.chat-highlight");
         if (firstMark) firstMark.classList.add("current");
 
-        wrapper.scrollIntoView({ behavior: "smooth", block: "center" });
+        // scroll inside messagesBox only
+        const top = wrapper.offsetTop;
+        const bottom = top + wrapper.offsetHeight;
+
+        const viewTop = messagesBox.scrollTop;
+        const viewBottom = viewTop + messagesBox.clientHeight;
+
+        if (top < viewTop) {
+            messagesBox.scrollTo({ top, behavior: "smooth" });
+        } else if (bottom > viewBottom) {
+            messagesBox.scrollTo({ top: bottom - messagesBox.clientHeight, behavior: "smooth" });
+        }
     }
 
     function renderMessages(messages, q) {
@@ -260,16 +269,16 @@
         }
 
         for (const m of messages) {
-            const email = (m.userEmail || "").toLowerCase();
-            const isMine = email === String(currentUserEmail).toLowerCase();
+            const email = String(m.userEmail || "").toLowerCase();
+            const isMine = email === String(currentUserEmail || "").toLowerCase();
 
             const wrapper = document.createElement("div");
             wrapper.className = "mb-3";
-            wrapper.dataset.msgId = String(m.id);
+            wrapper.setAttribute("data-msg-id", String(m.id));
 
             const meta = document.createElement("div");
             meta.className = "msg-meta";
-            const firstName = m.User?.firstName || "Unknown";
+            const firstName = (m.User && m.User.firstName) ? m.User.firstName : "Unknown";
             meta.textContent = `${firstName} • ${formatTime(m.createdAt)}`;
 
             const bubble = document.createElement("div");
@@ -286,7 +295,6 @@
                 const actions = document.createElement("div");
                 actions.className = "mt-2 d-flex gap-2 align-items-center";
 
-                // MULTI-SELECT checkbox
                 const cb = document.createElement("input");
                 cb.type = "checkbox";
                 cb.className = "form-check-input mt-0";
@@ -294,7 +302,6 @@
 
                 const idStr = String(m.id);
                 cb.value = idStr;
-                cb.dataset.msgId = idStr;
                 cb.checked = selectedIds.has(idStr);
 
                 cb.addEventListener("change", () => {
@@ -305,15 +312,14 @@
 
                 actions.appendChild(cb);
 
-                // DELETE (single) - with confirm (required)
                 const deleteForm = document.createElement("form");
                 deleteForm.method = "POST";
                 deleteForm.action = "/messages/delete";
 
-                const hiddenId1 = document.createElement("input");
-                hiddenId1.type = "hidden";
-                hiddenId1.name = "id";
-                hiddenId1.value = String(m.id);
+                const hiddenId = document.createElement("input");
+                hiddenId.type = "hidden";
+                hiddenId.name = "id";
+                hiddenId.value = idStr;
 
                 const trashBtn = document.createElement("button");
                 trashBtn.type = "submit";
@@ -321,28 +327,26 @@
                 trashBtn.title = "Delete";
                 trashBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
 
-                deleteForm.appendChild(hiddenId1);
+                deleteForm.appendChild(hiddenId);
                 deleteForm.appendChild(trashBtn);
 
-                // ✅ Confirm with message text (as required)
                 deleteForm.addEventListener("submit", (e) => {
-                    const preview = (m.text || "").trim();
+                    const preview = String(m.text || "").trim();
                     const ok = confirm(`Are you sure? Deleting a message cannot be undone.\n\nMessage:\n"${preview}"`);
                     if (!ok) e.preventDefault();
                 });
 
-                // EDIT (fetch)
                 const editBtn = document.createElement("button");
                 editBtn.type = "button";
-                editBtn.className  = "btn btn-sm btn-outline-secondary";
+                editBtn.className = "btn btn-sm btn-outline-secondary";
                 editBtn.title = "Edit";
                 editBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
 
                 editBtn.addEventListener("click", () => {
-                    if (bubble.dataset.editing === "1") return;
-                    bubble.dataset.editing = "1";
+                    if (bubble.getAttribute("data-editing") === "1") return;
+                    bubble.setAttribute("data-editing", "1");
 
-                    const originalText = m.text || "";
+                    const originalText = String(m.text || "");
 
                     const input = document.createElement("input");
                     input.type = "text";
@@ -379,6 +383,7 @@
                         const res = await fetch(`/api/messages/${m.id}`, {
                             method: "PATCH",
                             headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                            credentials: "same-origin",
                             body: JSON.stringify({ text: trimmed }),
                         });
 
@@ -390,12 +395,12 @@
                             return;
                         }
 
-                        bubble.dataset.editing = "0";
+                        bubble.setAttribute("data-editing", "0");
                         await loadMessages();
                     }
 
                     function cancel() {
-                        bubble.dataset.editing = "0";
+                        bubble.setAttribute("data-editing", "0");
                         textDiv.innerHTML = highlightText(originalText, q);
                         highlightCurrentMatchInDom();
                     }
@@ -409,25 +414,32 @@
                     });
                 });
 
-                actions.appendChild(deleteForm);
                 actions.appendChild(editBtn);
+                actions.appendChild(deleteForm);
                 wrapper.appendChild(actions);
             }
 
             messagesBox.appendChild(wrapper);
         }
 
-        // Newest-first: keep scroll at top
-        messagesBox.scrollTop = 0;
+        // ✅ real chat behavior:
+        // only auto-scroll when NOT searching
+        if (!q) {
+            messagesBox.scrollTop = messagesBox.scrollHeight;
+        }
     }
 
-    // Fetch messages (either normal or DB-search)
     async function fetchMessagesFromServer(q) {
         const url = q
             ? `/api/messages/search?q=${encodeURIComponent(q)}`
             : `/api/messages`;
 
-        const res = await fetch(url, { headers: { "Accept": "application/json" } });
+        const res = await fetch(url, {
+            method: "GET",
+            headers: { "Accept": "application/json", "Cache-Control": "no-cache" },
+            cache: "no-store",
+            credentials: "same-origin",
+        });
 
         if (res.status === 401) {
             redirectToLogin();
@@ -445,8 +457,7 @@
 
     async function loadMessages() {
         clearError();
-
-        const q = (searchInput?.value || "").trim();
+        const q = (searchInput && searchInput.value ? searchInput.value : "").trim();
         const messages = await fetchMessagesFromServer(q);
         if (!messages) return;
 
@@ -454,24 +465,19 @@
         applySearchAndRender();
     }
 
-    // Events
     if (refreshBtn) refreshBtn.addEventListener("click", () => void loadMessages());
 
     if (selectAllBtn) {
         selectAllBtn.addEventListener("click", () => {
             selectedIds.clear();
-
             for (const m of filteredMessages) {
-                if (String(m.userEmail).toLowerCase() === String(currentUserEmail).toLowerCase()) {
+                if (String(m.userEmail || "").toLowerCase() === String(currentUserEmail || "").toLowerCase()) {
                     selectedIds.add(String(m.id));
                 }
             }
-
             document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                const id = cb.value;
-                cb.checked = selectedIds.has(id);
+                cb.checked = selectedIds.has(cb.value);
             });
-
             updateDeleteSelectedUI();
         });
     }
@@ -479,39 +485,85 @@
     if (clearAllBtn) {
         clearAllBtn.addEventListener("click", () => {
             selectedIds.clear();
-
-            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                cb.checked = false;
-            });
-
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
             updateDeleteSelectedUI();
         });
     }
 
     if (deleteSelectedBtn) {
-        deleteSelectedBtn.addEventListener("click", () => void deleteSelected());
+        deleteSelectedBtn.addEventListener("click", async () => {
+            if (selectedIds.size === 0) return;
+            if (!confirm(`Delete ${selectedIds.size} selected messages?`)) return;
+
+            clearError();
+
+            const ids = Array.from(selectedIds);
+
+            const res = await fetch("/api/messages/delete-many", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                credentials: "same-origin",
+                body: JSON.stringify({ ids }),
+            });
+
+            if (res.status === 401) return redirectToLogin();
+
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                showError(body.error || `Failed to delete messages (${res.status})`);
+                return;
+            }
+
+            selectedIds.clear();
+            updateDeleteSelectedUI();
+            await loadMessages();
+        });
     }
 
-    // Search in DB: fetch on input (debounced)
     let searchTimer = null;
     if (searchInput) {
         searchInput.addEventListener("input", () => {
             clearTimeout(searchTimer);
             searchTimer = setTimeout(() => void loadMessages(), 250);
         });
+    }
 
-        searchInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && matchIds.length) {
-                e.preventDefault();
-                currentMatchIndex = (currentMatchIndex + 1) % matchIds.length;
-                if (matchInfo) matchInfo.textContent = `${currentMatchIndex + 1} / ${matchIds.length}`;
-                highlightCurrentMatchInDom();
+    // ✅ BONUS: send without page reload (no jump to top)
+    if (sendForm && msgInput) {
+        sendForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+
+            const text = msgInput.value.trim();
+            if (!text) return;
+
+            clearError();
+
+            const res = await fetch("/api/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                credentials: "same-origin",
+                body: JSON.stringify({ text }),
+            });
+
+            if (res.status === 401) return redirectToLogin();
+
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                showError(body.error || `Failed to send message (${res.status})`);
+                return;
             }
+
+            msgInput.value = "";
+            await loadMessages();
+
+            // keep input ready
+            msgInput.focus();
         });
     }
 
     if (nextMatchBtn) {
         nextMatchBtn.addEventListener("click", () => {
+            nextMatchBtn.blur(); // bonus
             if (!matchIds.length) return;
             currentMatchIndex = (currentMatchIndex + 1) % matchIds.length;
             if (matchInfo) matchInfo.textContent = `${currentMatchIndex + 1} / ${matchIds.length}`;
@@ -521,6 +573,7 @@
 
     if (prevMatchBtn) {
         prevMatchBtn.addEventListener("click", () => {
+            prevMatchBtn.blur(); // bonus
             if (!matchIds.length) return;
             currentMatchIndex = (currentMatchIndex - 1 + matchIds.length) % matchIds.length;
             if (matchInfo) matchInfo.textContent = `${currentMatchIndex + 1} / ${matchIds.length}`;
@@ -528,10 +581,8 @@
         });
     }
 
-    // Init + polling
-    const POLLING = 10_000; // 10 seconds
+    updateDeleteSelectedUI();
     void loadMessages();
-    setInterval(() => void loadMessages(), POLLING);
 </script>
 
 </body>

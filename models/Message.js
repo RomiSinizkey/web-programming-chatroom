@@ -2,6 +2,7 @@
 const { DataTypes } = require('sequelize');
 
 function defineMessage(sequelize) {
+
     const Message = sequelize.define(
         'Message',
         {
@@ -24,7 +25,7 @@ function defineMessage(sequelize) {
         {
             tableName: 'messages',
             timestamps: true,
-            paranoid: true, // מומלץ לחלק ב' למחיקות "רכות"
+            paranoid: true,
         }
     );
 

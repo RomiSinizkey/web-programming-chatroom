@@ -1,15 +1,161 @@
-# Exercise 5 – Chatroom Website
+[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/assignment-invitations/764de04399dba3d18619b585ada40536/status)
+# Review Assignment Due Date
 
-## Course
-Internet Programming A
+## Exercise 5 – Chatroom Website (Node.js + Express + EJS + MariaDB)
 
-## Exercise
-EX5
+This project implements a **multi-user Chatroom web application** using  
+**Node.js**, **Express**, **EJS**, and **MariaDB**, as part of the *Internet Programming* course.
 
-## Team Members
+The application allows users to register, log in securely, send messages in a shared chatroom, and persist all data in a relational database.
 
-### Or-Ram Atar
-- Email: orat@edu.jmc.ac.il
+---
 
-### Romi Sinizkey
-- Email: romisi@edu.jmc.ac.il
+## 👥 Authors
+
+- **Author 1:** ROMI SINIZKEY
+- **Author 2:** OR-RAM ATAR
+
+- **Emails:**
+    - orat@edu.jmc.ac.il
+    - romisi@edu.jmc.ac.il
+
+- **Course:** Internet Programming – JMC
+
+---
+
+## 🧩 Features
+
+- Express.js server built on Node.js
+- Server-side rendering using EJS
+- User authentication system:
+    - User registration
+    - User login
+    - Session-based authentication (`express-session`)
+    - Password hashing using `bcrypt`
+- Chatroom functionality:
+    - Sending messages
+    - Viewing message history
+    - Messages stored persistently in the database
+- Database layer:
+    - MariaDB relational database
+    - Sequelize ORM
+    - User and Message models
+- Docker support:
+    - Docker Compose setup for the database
+- Error handling:
+    - 404 and 500 error pages
+    - Centralized error middleware
+
+---
+
+## 🗂 Project Structure
+
+ex5-express/
+│
+├── app.js
+├── bin/
+│   └── www
+│
+├── models/
+│   ├── User.js
+│   ├── Message.js
+│   └── index.js
+│
+├── mydatabase-docker/
+│   └── docker-compose.yml
+│
+├── views/
+├── public/
+├── package.json
+└── README.md
+---
+
+## 💻 How to Run
+
+### 1️⃣ Install Dependencies
+```bash
+npm install
+```
+
+---
+
+### #️⃣ Start the Database (MariaDB)
+
+```bash
+cd mydatabase-docker
+docker-compose up -d
+```
+
+---
+### 3️⃣ Run the Server
+npm start
+---
+
+### 4️⃣ Open the Application
+
+Open your browser and navigate to:
+http://localhost:3000
+
+---
+### 🌐 Assumptions
+
+- No frontend frameworks (such as React or Vue) are used
+
+- All data is stored in a relational database
+
+- Authentication is session-based (no JWT)
+
+- The project is intended to run locally
+
+- Docker is used only for the database layer
+---
+
+### 🔐 Security
+
+- Passwords are hashed using bcrypt before storage
+
+- Sessions are managed on the server
+
+- Only authenticated users can access the chatroom and send messages
+
+---
+
+### 🧪 Validation Rules
+#### Username
+
+- English letters only
+
+- Length between 3 and 32 characters
+
+#### Password
+
+- Stored only in hashed form
+
+#### Messages
+
+- Cannot be empty
+
+- Can only be sent by logged-in users
+---
+### 📌 Notes
+
+- Sequelize is used to separate database logic from application logic
+
+- The codebase is modular and easy to maintain
+
+- The project follows the academic requirements of the course
+
+- Rendering is performed using EJS templates
+---
+
+### ✅ Summary
+
+- This project demonstrates a complete Express.js web application, including:
+
+- User authentication
+
+- Persistent storage with MariaDB
+
+- Server-side rendering using EJS
+
+- All implemented according to best practices taught in the course.
