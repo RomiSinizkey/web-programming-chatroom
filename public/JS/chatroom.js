@@ -4,7 +4,7 @@ import {
     escapeHtml,
     escapeRegex,
     formatTime,
-} from "./utils.js";
+} from "./chat/utils.js";
 
 import {
     fetchMessages,

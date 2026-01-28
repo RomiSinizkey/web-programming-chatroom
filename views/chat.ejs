@@ -1,14 +1,12 @@
 <%- include('includes/head', {
 title: 'Chatroom',
-css: ['/stylesheets/chat.css'],
 bodyClass: 'bg-light'
 }) %>
 
-
-
 <%
-// noinspection JSUnresolvedReference,JSUnresolvedVariable,JSCheckFunctionSignatures
-const user = (locals && locals.user) ? locals.user : { email:"", firstName:"", lastName:"" };
+const user = (locals && locals.user)
+        ? locals.user
+        : { email: "", firstName: "", lastName: "" };
 %>
 
 <div class="container py-5">
@@ -20,7 +18,7 @@ const user = (locals && locals.user) ? locals.user : { email:"", firstName:"", l
                 <a href="/logout" class="btn btn-outline-secondary btn-sm">Logout</a>
             </div>
 
-            <div class="alert alert-success" role="alert">
+            <div class="alert alert-success">
                 Logged in as <strong><%= user.firstName %> <%= user.lastName %></strong>
                 (<%= user.email %>)
             </div>
@@ -32,33 +30,33 @@ const user = (locals && locals.user) ? locals.user : { email:"", firstName:"", l
                         <div class="text-muted small">Messages (latest 50)</div>
 
                         <div class="d-flex gap-2">
-                            <button id="selectAllBtn" type="button" class="btn btn-sm btn-outline-secondary">Select all</button>
-                            <button id="clearAllBtn" type="button" class="btn btn-sm btn-outline-secondary">Clear</button>
-                            <button id="deleteSelectedBtn" type="button" class="btn btn-sm btn-outline-danger" disabled>
+                            <button id="selectAllBtn" class="btn btn-sm btn-outline-secondary">Select all</button>
+                            <button id="clearAllBtn" class="btn btn-sm btn-outline-secondary">Clear</button>
+                            <button id="deleteSelectedBtn" class="btn btn-sm btn-outline-danger" disabled>
                                 Delete selected
                             </button>
-                            <button id="refreshBtn" type="button" class="btn btn-sm btn-outline-primary">Refresh</button>
+                            <button id="refreshBtn" class="btn btn-sm btn-outline-primary">Refresh</button>
                         </div>
                     </div>
 
                     <div class="d-flex gap-2 align-items-center mb-2">
-                        <label for="searchInput" class="visually-hidden">Search messages</label>
                         <input
-                                id="searchInput" class="form-control form-control-sm"
-                                type="text" placeholder="Search messages in DB..."
+                                id="searchInput"
+                                class="form-control form-control-sm"
+                                type="text"
+                                placeholder="Search messages in DB..."
                                 autocomplete="off"
                         />
 
-                        <button id="prevMatchBtn" type="button" class="btn btn-sm btn-outline-secondary" disabled>Prev</button>
-                        <button id="nextMatchBtn" type="button" class="btn btn-sm btn-outline-secondary" disabled>Next</button>
+                        <button id="prevMatchBtn" class="btn btn-sm btn-outline-secondary" disabled>Prev</button>
+                        <button id="nextMatchBtn" class="btn btn-sm btn-outline-secondary" disabled>Next</button>
 
                         <div id="matchInfo" class="text-muted small ms-1"></div>
                     </div>
 
                     <div id="messagesBox" class="border rounded p-3 mb-3"></div>
 
-                    <form id="sendForm" class="d-flex gap-2" autocomplete="off" method="POST" action="/messages">
-                        <label for="msgInput" class="visually-hidden">Message</label>
+                    <form id="sendForm" class="d-flex gap-2" method="POST" action="/messages">
                         <input
                                 id="msgInput"
                                 name="text"
@@ -68,7 +66,7 @@ const user = (locals && locals.user) ? locals.user : { email:"", firstName:"", l
                                 placeholder="Type a message..."
                                 required
                         />
-                        <button id="sendBtn" class="btn btn-primary" type="submit">Send</button>
+                        <button class="btn btn-primary" type="submit">Send</button>
                     </form>
 
                     <div id="errorBox" class="mt-3 d-none alert alert-danger mb-0"></div>
@@ -87,6 +85,3 @@ const user = (locals && locals.user) ? locals.user : { email:"", firstName:"", l
 <script type="module" src="/JS/chatroom.js"></script>
 
 <%- include('includes/foot') %>
-
-
-

@@ -1,29 +1,18 @@
 <%
-/**
- * register.ejs
- * IDE-friendly defaults (WebStorm) – runtime values still come from res.render(...)
- */
-// @ts-ignore
 var step = typeof step !== 'undefined' ? step : 1;
-// @ts-ignore
 var data = typeof data !== 'undefined' ? data : {};
-// @ts-ignore
 var error = typeof error !== 'undefined' ? error : null;
 %>
 
 <%- include('includes/head', {
 title: 'Register',
-bodyClass: 'bg-light',
-css: ['/stylesheets/auth.css']
+bodyClass: 'bg-light'
 }) %>
-
-
-
-
 
 <div class="container py-5">
     <div class="row justify-content-center">
         <div class="col-12 col-sm-10 col-md-8 col-lg-6">
+
             <div class="card shadow-sm auth-card">
                 <div class="card-body p-4">
 
@@ -31,58 +20,31 @@ css: ['/stylesheets/auth.css']
                         <h1 class="h4 text-center mb-3 auth-title">Register Step 1</h1>
 
                         <% if (error) { %>
-                            <div class="alert alert-danger" role="alert"><%= error %></div>
+                            <div class="alert alert-danger"><%= error %></div>
                         <% } %>
 
-                        <form method="post" action="/register" class="auth-form" novalidate>
+                        <form method="post" action="/register">
                             <input type="hidden" name="step" value="1" />
 
                             <div class="mb-3">
-                                <label class="form-label" for="email">Email</label>
-                                <input
-                                        id="email"
-                                        type="email"
-                                        name="email"
-                                        class="form-control"
-                                        required
-                                        maxlength="32"
-                                        value="<%= data.email || '' %>"
-                                />
+                                <label class="form-label">Email</label>
+                                <input type="email" name="email" class="form-control"
+                                       value="<%= data.email || '' %>" required />
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label" for="firstName">First name</label>
-                                <input
-                                        id="firstName"
-                                        type="text"
-                                        name="firstName"
-                                        class="form-control"
-                                        required
-                                        minlength="3"
-                                        maxlength="32"
-                                        pattern="[A-Za-z]{3,32}"
-                                        value="<%= data.firstName || '' %>"
-                                />
-                                <div class="form-text">Letters only (A-Z), 3-32 chars</div>
+                                <label class="form-label">First name</label>
+                                <input type="text" name="firstName" class="form-control"
+                                       value="<%= data.firstName || '' %>" required />
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label" for="lastName">Last name</label>
-                                <input
-                                        id="lastName"
-                                        type="text"
-                                        name="lastName"
-                                        class="form-control"
-                                        required
-                                        minlength="3"
-                                        maxlength="32"
-                                        pattern="[A-Za-z]{3,32}"
-                                        value="<%= data.lastName || '' %>"
-                                />
-                                <div class="form-text">Letters only (A-Z), 3-32 chars</div>
+                                <label class="form-label">Last name</label>
+                                <input type="text" name="lastName" class="form-control"
+                                       value="<%= data.lastName || '' %>" required />
                             </div>
 
-                            <button type="submit" class="btn btn-primary w-100">Next</button>
+                            <button class="btn btn-primary w-100">Next</button>
                         </form>
 
                         <div class="text-center mt-3">
@@ -93,45 +55,29 @@ css: ['/stylesheets/auth.css']
                     <% if (step === 2) { %>
                         <h1 class="h4 text-center mb-3 auth-title">Register Step 2</h1>
 
-                        <div class="alert alert-secondary" role="alert">
-                            <div><strong>Email:</strong> <%= data.email %></div>
-                            <div><strong>Name:</strong> <%= data.firstName %> <%= data.lastName %></div>
+                        <div class="alert alert-secondary">
+                            <strong><%= data.firstName %> <%= data.lastName %></strong><br>
+                            <%= data.email %>
                         </div>
 
                         <% if (error) { %>
-                            <div class="alert alert-danger" role="alert"><%= error %></div>
+                            <div class="alert alert-danger"><%= error %></div>
                         <% } %>
 
-                        <form method="post" action="/register" class="auth-form" novalidate>
+                        <form method="post" action="/register">
                             <input type="hidden" name="step" value="2" />
 
                             <div class="mb-3">
-                                <label class="form-label" for="password">Password</label>
-                                <input
-                                        id="password"
-                                        type="password"
-                                        name="password"
-                                        class="form-control"
-                                        required
-                                        minlength="3"
-                                        maxlength="32"
-                                />
+                                <label class="form-label">Password</label>
+                                <input type="password" name="password" class="form-control" required />
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label" for="password2">Repeat Password</label>
-                                <input
-                                        id="password2"
-                                        type="password"
-                                        name="password2"
-                                        class="form-control"
-                                        required
-                                        minlength="3"
-                                        maxlength="32"
-                                />
+                                <label class="form-label">Repeat password</label>
+                                <input type="password" name="password2" class="form-control" required />
                             </div>
 
-                            <button type="submit" class="btn btn-primary w-100">Submit</button>
+                            <button class="btn btn-primary w-100">Submit</button>
                         </form>
 
                         <div class="text-center mt-3">
@@ -143,7 +89,7 @@ css: ['/stylesheets/auth.css']
             </div>
 
             <p class="text-center text-muted small mt-3 mb-0 auth-footer">
-                Cookie timeout: 30 seconds from entering Step 2
+                Cookie timeout: 30 seconds
             </p>
 
         </div>

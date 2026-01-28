@@ -10,17 +10,8 @@
             rel="stylesheet"
     >
 
-    <!-- base css always -->
-    <link rel="stylesheet" href="/stylesheets/base.css">
-
-    <%
-    // SAFE: css may not exist at all
-    const cssList = (typeof css !== 'undefined' && Array.isArray(css)) ? css : [];
-    %>
-
-    <% cssList.forEach(href => { %>
-        <link rel="stylesheet" href="<%= href %>">
-    <% }) %>
+    <!-- single global stylesheet -->
+    <link rel="stylesheet" href="/stylesheets/style.css">
 </head>
 
 <body class="<%= bodyClass || 'bg-light' %>">

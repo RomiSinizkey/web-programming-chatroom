@@ -1,4 +1,4 @@
-// controllers/messages.js
+// controllers/messages.api.js
 // @ts-check
 
 const { Op } = require('sequelize');
@@ -76,41 +76,6 @@ async function postMessageApi(req, res, next) {
     }
 }
 
-async function postMessageForm(req, res, next) {
-    try {
-        if (!req.session.user) {
-            return res.redirect('/?msg=' + encodeURIComponent('Please login first'));
-        }
-
-        const text = String(req.body.text || '').trim();
-        if (!text || text.length > 500) return res.redirect('/chat');
-
-        await Message.create({ text, userEmail: req.session.user.email });
-        return res.redirect('/chat');
-    } catch (err) {
-        return next(err);
-    }
-}
-
-async function deleteOneForm(req, res, next) {
-    try {
-        if (!req.session.user) {
-            return res.redirect('/?msg=' + encodeURIComponent('Please login first'));
-        }
-
-        const id = req.body.id;
-        const msg = await Message.findByPk(id);
-
-        if (!msg) return res.redirect('/chat');
-        if (msg.userEmail !== req.session.user.email) return res.redirect('/chat');
-
-        await msg.destroy();
-        return res.redirect('/chat');
-    } catch (err) {
-        return next(err);
-    }
-}
-
 async function deleteManyApi(req, res, next) {
     try {
         const ids = req.body.ids;
@@ -138,7 +103,5 @@ module.exports = {
     searchMessages,
     patchMessage,
     postMessageApi,
-    postMessageForm,
-    deleteOneForm,
     deleteManyApi,
 };
