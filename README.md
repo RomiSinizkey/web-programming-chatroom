@@ -1,7 +1,6 @@
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/assignment-invitations/764de04399dba3d18619b585ada40536/status)
-# Review Assignment Due Date
 
-## Exercise 5 – Chatroom Website (Node.js + Express + EJS + MariaDB)
+# Exercise 5 – Chatroom Website (Node.js + Express + EJS + MariaDB)
 
 This project implements a **multi-user Chatroom web application** using  
 **Node.js**, **Express**, **EJS**, and **MariaDB**, as part of the *Internet Programming* course.
@@ -28,14 +27,15 @@ The application allows users to register, log in securely, send messages in a sh
 - Express.js server built on Node.js
 - Server-side rendering using EJS
 - User authentication system:
-    - User registration
+    - Two-step user registration
     - User login
     - Session-based authentication (`express-session`)
     - Password hashing using `bcrypt`
 - Chatroom functionality:
     - Sending messages
     - Viewing message history
-    - Messages stored persistently in the database
+    - Editing and deleting messages by the message owner
+    - Searching messages in the database
 - Database layer:
     - MariaDB relational database
     - Sequelize ORM
@@ -50,26 +50,96 @@ The application allows users to register, log in securely, send messages in a sh
 
 ## 🗂 Project Structure
 
-ex5-express/
-│
-├── app.js
-├── bin/
-│   └── www
-│
-├── models/
-│   ├── User.js
-│   ├── Message.js
-│   └── index.js
-│
-├── mydatabase-docker/
-│   └── docker-compose.yml
-│
-├── views/
-├── public/
-├── package.json
-└── README.md
+```text
+ex5-express-orramatar_romisinizkey/
+├─ app.js
+├─ bin/
+├─ controllers/
+├─ middleware/
+├─ models/
+├─ routes/
+├─ views/
+│  ├─ includes/
+│  │  ├─ head.ejs
+│  │  └─ foot.ejs
+│  ├─ login.ejs
+│  ├─ register.ejs
+│  ├─ chatroom.ejs
+│  └─ error.ejs
+├─ public/
+│  ├─ stylesheets/
+│  │  └─ style.css
+│  └─ JS/
+│     └─ chatroom.js   (מומלץ)
+└─ mydatabase-docker/
+   └─ docker-compose.yml
+```
+
+---
+## ⚙️ Configuration
+
+The application uses environment variables for configuration.
+
+### Required variables:
+- `SESSION_SECRET` – session signing secret (optional, defaults to dev value)
+
+Database credentials are configured in the Docker Compose file  
+and **must not be changed**, according to course instructions.
+
+---
+## 🍪 Sessions & Cookies
+
+- Authentication is handled using server-side sessions (`express-session`)
+- User registration data is temporarily stored using cookies
+- Registration cookie timeout is **30 seconds**, as required by the assignment
+- If the timeout expires, the registration process is reset
 ---
 
+## 🔄 Chat Updates & Polling
+
+- Chat messages are retrieved using REST API polling
+- Polling interval is configurable via a constant
+- All users see the same chat content in the same order
+- Chat content updates immediately after:
+    - Message creation
+    - Message deletion
+    - Message edit
+  
+---
+
+## 🔐 Authorization Rules
+
+- Only authenticated users can access the chatroom
+- Only the message owner can:
+    - Edit their messages
+    - Delete their messages
+- All REST API routes are protected against unauthorized access
+---
+
+## 🧪 Validation Rules
+### Registration
+
+- Valid email address
+
+- First name / Last name:
+
+    - English letters only
+
+    - Length between 3 and 32 characters
+
+- All inputs are trimmed (whitespace-only input is invalid)
+
+### Password
+
+- Stored only in hashed form using bcrypt
+
+### Messages
+
+- Cannot be empty
+
+- Can only be sent by logged-in users
+
+---
 ## 💻 How to Run
 
 ### 1️⃣ Install Dependencies
@@ -97,7 +167,7 @@ Open your browser and navigate to:
 http://localhost:3000
 
 ---
-### 🌐 Assumptions
+## 🌐 Assumptions
 
 - No frontend frameworks (such as React or Vue) are used
 
@@ -110,7 +180,7 @@ http://localhost:3000
 - Docker is used only for the database layer
 ---
 
-### 🔐 Security
+## 🔐 Security
 
 - Passwords are hashed using bcrypt before storage
 
@@ -120,7 +190,7 @@ http://localhost:3000
 
 ---
 
-### 🧪 Validation Rules
+## 🧪 Validation Rules
 #### Username
 
 - English letters only
@@ -137,7 +207,7 @@ http://localhost:3000
 
 - Can only be sent by logged-in users
 ---
-### 📌 Notes
+## 📌 Notes
 
 - Sequelize is used to separate database logic from application logic
 
@@ -146,6 +216,14 @@ http://localhost:3000
 - The project follows the academic requirements of the course
 
 - Rendering is performed using EJS templates
+- 
+---
+## 🧠 Design Decisions & Limitations
+
+- WebSockets were intentionally not used, according to course requirements
+- The database layer is fully handled via Sequelize ORM
+- Client-side state is minimal; the server is the single source of truth
+- The application is intended for local development only
 ---
 
 ### ✅ Summary
