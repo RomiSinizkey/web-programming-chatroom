@@ -1,6 +1,6 @@
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/assignment-invitations/764de04399dba3d18619b585ada40536/status)
 
-# Exercise 5 – Chatroom Website (Node.js + Express + EJS + MariaDB)
+#  Chatroom Website (Node.js + Express + EJS + MariaDB)
 
 This project implements a **multi-user Chatroom web application** using  
 **Node.js**, **Express**, **EJS**, and **MariaDB**, as part of the *Internet Programming* course.
@@ -15,10 +15,8 @@ The application allows users to register, log in securely, send messages in a sh
 - **Author 2:** OR-RAM ATAR
 
 - **Emails:**
-    - orat@edu.jmc.ac.il
-    - romisi@edu.jmc.ac.il
+    - sinizromi@gmail.com
 
-- **Course:** Internet Programming – JMC
 
 ---
 
