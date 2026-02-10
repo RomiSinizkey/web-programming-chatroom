@@ -9,10 +9,9 @@ The application allows users to register, log in securely, send messages in a sh
 
 ---
 
-## 👥 Authors
+## 👥 Author
 
-- **Author 1:** ROMI SINIZKEY
-- **Author 2:** OR-RAM ATAR
+ ROMI SINIZKEY
 
 - **Emails:**
     - sinizromi@gmail.com
