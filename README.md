@@ -67,7 +67,7 @@ ex5-express-orramatar_romisinizkey/
 │  ├─ stylesheets/
 │  │  └─ style.css
 │  └─ JS/
-│     └─ chatroom.js   (מומלץ)
+│     └─ chatroom.js  
 └─ mydatabase-docker/
    └─ docker-compose.yml
 ```
